@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: ticketeer
+      POSTGRES_USER: postgres
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ticketeer"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    ports:
+      - "5432:5432"
+      - "9000:9000"
+    volumes:
+      - ./resources/postgres/000-bootstrap.sql:/docker-entrypoint-initdb.d/000-bootstrap.sql:ro
+      - ./api/migrations/001-up_initial.sql:/docker-entrypoint-initdb.d/001-up_initial.sql:ro
+      - ./api/fixtures/sample-data.sql:/docker-entrypoint-initdb.d/002-up_initial.sql:ro
+
+  api:
+    build:
+      context: ./api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGUSER: postgres
+    network_mode: "service:postgres"
+
+  webapp:
+    build:
+      context: ./webapp
+    depends_on:
+      - api
+    network_mode: "service:postgres"
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      - api
+      - webapp
+    network_mode: "service:postgres"
+    volumes:
+      - ./resources/nginx.conf:/etc/nginx/nginx.conf:ro
+    command: ["nginx", "-g", "daemon off;"]
+
+volumes:
+  postgres-data:

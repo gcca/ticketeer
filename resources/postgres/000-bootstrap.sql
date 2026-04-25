@@ -1,0 +1,12 @@
+DO
+$$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'root') THEN
+    CREATE ROLE root WITH LOGIN SUPERUSER;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'gcca') THEN
+    CREATE ROLE gcca WITH LOGIN SUPERUSER;
+  END IF;
+END
+$$;

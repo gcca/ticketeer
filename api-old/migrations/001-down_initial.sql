@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS ticketeer.auth_session;
+DROP TABLE IF EXISTS ticketeer.helpdesk_ticket;
+DROP TABLE IF EXISTS ticketeer.helpdesk_setting;
+DROP TABLE IF EXISTS ticketeer.helpdesk_request_type;
+DROP TABLE IF EXISTS ticketeer.helpdesk_request_category;
+DROP TABLE IF EXISTS ticketeer.helpdesk_priority;
+DROP TABLE IF EXISTS ticketeer.helpdesk_ticket_status;
+DROP TYPE  IF EXISTS ticketeer.helpdesk_ticket_trait;
+DROP TABLE IF EXISTS ticketeer.helpdesk_profile;
+DROP TABLE IF EXISTS ticketeer.helpdesk_department;
+DROP TYPE  IF EXISTS ticketeer.helpdesk_role;
+DROP TABLE IF EXISTS ticketeer.auth_user;
+DROP SCHEMA IF EXISTS ticketeer;
+DROP EXTENSION IF EXISTS pgcrypto;
