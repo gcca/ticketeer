@@ -129,10 +129,10 @@ export function DashboardPage({ token, onSignout }: Props) {
           >
             <span className="flex items-center gap-2">
               <span className="inline-flex size-7 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                {profile.user.username.slice(0, 1).toUpperCase()}
+                {profile.name.slice(0, 1).toUpperCase()}
               </span>
               <span className="truncate text-left">
-                <span className="block text-xs font-medium text-foreground">{profile.user.username}</span>
+                <span className="block text-xs font-medium text-foreground">{profile.name}</span>
                 <span className="block text-xs text-muted-foreground">{ROLE_LABEL[profile.role] ?? profile.role}</span>
               </span>
             </span>
@@ -167,7 +167,7 @@ export function DashboardPage({ token, onSignout }: Props) {
               <div>
                 <h2 className="text-xl font-semibold tracking-tight">Dashboard</h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Bienvenido, {profile.user.username}
+                  Bienvenido, {profile.name}
                 </p>
               </div>
 
@@ -177,6 +177,10 @@ export function DashboardPage({ token, onSignout }: Props) {
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
                   <div>
+                    <p className="text-muted-foreground mb-1">Nombre</p>
+                    <p className="font-medium">{profile.name}</p>
+                  </div>
+                  <div>
                     <p className="text-muted-foreground mb-1">Usuario</p>
                     <p className="font-medium">{profile.user.username}</p>
                   </div>
@@ -185,10 +189,6 @@ export function DashboardPage({ token, onSignout }: Props) {
                     <Badge variant="secondary">
                       {ROLE_LABEL[profile.role] ?? profile.role}
                     </Badge>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground mb-1">ID de perfil</p>
-                    <p className="font-medium">{profile.id}</p>
                   </div>
                 </CardContent>
               </Card>

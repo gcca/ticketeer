@@ -347,7 +347,8 @@ http POST http://localhost:5521/ticketeer/api/auth/v1/signout Authorization:"Bea
 
 ## GET `/ticketeer/api/dashboard/v1/landing`
 
-Returns the initial dashboard information for the authenticated user: profile, departments, and ticket statuses.
+Returns the initial dashboard information for the authenticated user: profile,
+departments, ticket statuses, request types, priorities, and default values.
 
 Full URL:
 
@@ -445,6 +446,11 @@ Contract:
       "id": "3",
       "name": "high",
       "display_name": "High"
+    },
+    {
+      "id": "4",
+      "name": "critical",
+      "display_name": "Critical"
     }
   ],
   "defaults": {
@@ -453,7 +459,10 @@ Contract:
 }
 ```
 
-Note: the example shows abbreviated arrays. The real response includes all departments ordered by `name` and all statuses ordered by `id`.
+Note: the example shows abbreviated arrays. The real response includes all
+departments ordered by `name`, all ticket statuses ordered by `id`, all request
+types ordered by `name`, and all priorities ordered by `id`. Display labels and
+descriptions are database values, so they may be localized by the seed data.
 
 Contract for `profile`:
 

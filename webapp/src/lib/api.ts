@@ -6,6 +6,7 @@ export type LandingProfile = {
   id: string
   department_id: string
   role: string
+  name: string
   user: {
     id: string
     username: string
