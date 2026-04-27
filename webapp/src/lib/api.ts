@@ -1,6 +1,7 @@
 const AUTH = '/ticketeer/api/auth/v1'
 const DASHBOARD = '/ticketeer/api/dashboard/v1'
 const REQUESTER = '/ticketeer/api/role/requester/v1'
+const SUPERVISOR = '/ticketeer/api/role/supervisor/v1'
 
 export type LandingProfile = {
   id: string
@@ -202,4 +203,63 @@ export async function TicketList(token: string): Promise<Ticket[]> {
     )
   }
   return res.json() as Promise<Ticket[]>
+}
+
+export async function SupervisorTicketList(token: string): Promise<Ticket[]> {
+  const res = await fetch(`${SUPERVISOR}/ticket/list`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { message?: string }
+    throw Object.assign(new Error(body.message ?? res.statusText), { status: res.status })
+  }
+  return res.json() as Promise<Ticket[]>
+}
+
+export async function SupervisorTicketCreate(token: string, input: CreateTicketInput): Promise<CreatedTicket> {
+  const body: Record<string, string> = {
+    request_type_id: input.request_type_id,
+    department_id: input.department_id,
+    priority_id: input.priority_id,
+    description: input.description,
+  }
+  if (input.due_date) body.due_date = input.due_date
+  const res = await fetch(`${SUPERVISOR}/ticket/create`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string }
+    throw Object.assign(new Error(err.message ?? res.statusText), { status: res.status })
+  }
+  return res.json() as Promise<CreatedTicket>
+}
+
+export async function SupervisorTicketDetails(token: string, id: string): Promise<TicketDetail> {
+  const res = await fetch(`${SUPERVISOR}/ticket/${id}/details`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string }
+    throw Object.assign(new Error(err.message ?? res.statusText), { status: res.status })
+  }
+  return res.json() as Promise<TicketDetail>
+}
+
+export async function SupervisorActivityCreateMessage(
+  token: string,
+  ticket_id: string,
+  message: string,
+): Promise<TicketActivityDetail> {
+  const res = await fetch(`${SUPERVISOR}/ticket/${ticket_id}/activity/create/message`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string }
+    throw Object.assign(new Error(err.message ?? res.statusText), { status: res.status })
+  }
+  return res.json() as Promise<TicketActivityDetail>
 }

@@ -234,9 +234,8 @@ CreateTicket(quill::Logger *logger, PGconn *pg, const std::string &profile_id,
 
 [[nodiscard]] inline TicketLookup
 FetchTicketDetails(quill::Logger *logger, PGconn *pg,
-                   const std::string &ticket_id,
-                   const std::string &profile_id) {
-  const char *params[] = {ticket_id.c_str(), profile_id.c_str()};
+                   const std::string &ticket_id) {
+  const char *params[] = {ticket_id.c_str()};
   PGresult *res = PQexecParams(pg,
                                R"SQL(
 SELECT t.id::text,
@@ -277,9 +276,8 @@ SELECT t.id::text,
   LEFT JOIN auth."user" au
     ON au.id = ap.user_id
  WHERE t.id = $1::bigint
-   AND t.requester_id = $2::bigint
 )SQL",
-                               2, nullptr, params, nullptr, nullptr, 0);
+                               1, nullptr, params, nullptr, nullptr, 0);
 
   if (PQresultStatus(res) != PGRES_TUPLES_OK) {
     LOGJ_DEBUG(logger, "[supervisor] ticket details query error",
@@ -327,18 +325,16 @@ SELECT t.id::text,
 
 [[nodiscard]] inline TicketLookup
 FetchTicketActivityList(quill::Logger *logger, PGconn *pg,
-                        const std::string &ticket_id,
-                        const std::string &profile_id) {
-  const char *ticket_params[] = {ticket_id.c_str(), profile_id.c_str()};
+                        const std::string &ticket_id) {
+  const char *ticket_params[] = {ticket_id.c_str()};
   PGresult *ticket_res =
       PQexecParams(pg,
                    R"SQL(
 SELECT id::text
   FROM helpdesk.ticket
  WHERE id = $1::bigint
-   AND requester_id = $2::bigint
 )SQL",
-                   2, nullptr, ticket_params, nullptr, nullptr, 0);
+                   1, nullptr, ticket_params, nullptr, nullptr, 0);
 
   if (PQresultStatus(ticket_res) != PGRES_TUPLES_OK) {
     LOGJ_DEBUG(logger, "[supervisor] ticket activity owner query error",
@@ -549,7 +545,7 @@ void Supervisor::TicketDetails(
                       drogon::k403Forbidden);
   }
 
-  auto ticket = FetchTicketDetails(logger, pg, ticket_id, *profile_id);
+  auto ticket = FetchTicketDetails(logger, pg, ticket_id);
   if (ticket.status == TicketLookupStatus::QueryFailed) {
     PQfinish(pg);
     return BadRequest(callback, "Database query failed");
@@ -560,7 +556,7 @@ void Supervisor::TicketDetails(
     return BadRequest(callback, "Ticket not found", drogon::k404NotFound);
   }
 
-  auto activities = FetchTicketActivityList(logger, pg, ticket_id, *profile_id);
+  auto activities = FetchTicketActivityList(logger, pg, ticket_id);
   if (activities.status == TicketLookupStatus::QueryFailed) {
     PQfinish(pg);
     return BadRequest(callback, "Database query failed");
@@ -601,7 +597,7 @@ void Supervisor::TicketActivityList(
                       drogon::k403Forbidden);
   }
 
-  auto activities = FetchTicketActivityList(logger, pg, ticket_id, *profile_id);
+  auto activities = FetchTicketActivityList(logger, pg, ticket_id);
   if (activities.status == TicketLookupStatus::QueryFailed) {
     PQfinish(pg);
     return BadRequest(callback, "Database query failed");
@@ -649,17 +645,15 @@ void Supervisor::TicketActivityCreateMessage(
                       drogon::k401Unauthorized);
   }
 
-  // Check ticket ownership
-  const char *ticket_params[] = {ticket_id.c_str(), profile_id->c_str()};
+  const char *ticket_params[] = {ticket_id.c_str()};
   PGresult *ticket_res =
       PQexecParams(pg,
                    R"SQL(
 SELECT id::text
   FROM helpdesk.ticket
  WHERE id = $1::bigint
-   AND requester_id = $2::bigint
       )SQL",
-                   2, nullptr, ticket_params, nullptr, nullptr, 0);
+                   1, nullptr, ticket_params, nullptr, nullptr, 0);
 
   if (PQresultStatus(ticket_res) != PGRES_TUPLES_OK) {
     LOGJ_DEBUG(logger, "[supervisor] ticket owner query error",

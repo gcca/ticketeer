@@ -3,7 +3,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { GetLanding, type LandingData } from '@/lib/api'
-import { TicketsPage } from '@/pages/role/requester/TicketsPage'
+import { TicketsPage as RequesterTicketsPage } from '@/pages/role/requester/TicketsPage'
+import { TicketsPage as SupervisorTicketsPage } from '@/pages/role/supervisor/TicketsPage'
 
 type Props = {
   token: string
@@ -195,8 +196,19 @@ export function DashboardPage({ token, onSignout }: Props) {
             </>
           )}
 
-          {section === 'tickets' && (
-            <TicketsPage
+          {section === 'tickets' && profile.role === 'supervisor' && (
+            <SupervisorTicketsPage
+              token={token}
+              onSignout={onSignout}
+              requestTypes={state.data.request_types}
+              departments={state.data.departments}
+              priorities={state.data.priorities}
+              ticketStatuses={state.data.ticket_statuses}
+            />
+          )}
+
+          {section === 'tickets' && profile.role !== 'supervisor' && (
+            <RequesterTicketsPage
               token={token}
               onSignout={onSignout}
               requestTypes={state.data.request_types}

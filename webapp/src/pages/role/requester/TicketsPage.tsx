@@ -7,6 +7,8 @@ import {
   TicketCreate,
   TicketDetails,
   TicketList,
+  type CreateTicketInput,
+  type CreatedTicket,
   type Department,
   type Priority,
   type RequestType,
@@ -16,6 +18,20 @@ import {
   type TicketStatus,
 } from '@/lib/api'
 
+export type TicketsPageApi = {
+  listTickets: (token: string) => Promise<Ticket[]>
+  createTicket: (token: string, input: CreateTicketInput) => Promise<CreatedTicket>
+  getDetails: (token: string, id: string) => Promise<TicketDetail>
+  createMessage: (token: string, ticketId: string, message: string) => Promise<TicketActivityDetail>
+}
+
+const defaultApi: TicketsPageApi = {
+  listTickets: TicketList,
+  createTicket: TicketCreate,
+  getDetails: TicketDetails,
+  createMessage: ActivityCreateMessage,
+}
+
 type Props = {
   token: string
   onSignout: () => void
@@ -23,6 +39,7 @@ type Props = {
   departments: Department[]
   priorities: Priority[]
   ticketStatuses: TicketStatus[]
+  api?: TicketsPageApi
 }
 
 type ListState =
@@ -80,7 +97,7 @@ function DetailField({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function TicketsPage({ token, onSignout, requestTypes, departments, priorities, ticketStatuses }: Props) {
+export function TicketsPage({ token, onSignout, requestTypes, departments, priorities, ticketStatuses, api = defaultApi }: Props) {
   const [listState, setListState] = useState<ListState>({ status: 'loading' })
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -94,7 +111,7 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
 
   function loadTickets() {
     setListState({ status: 'loading' })
-    TicketList(token)
+    api.listTickets(token)
       .then(tickets => setListState({ status: 'ready', tickets }))
       .catch(err => {
         if ((err as { status?: number }).status === 401) { onSignout(); return }
@@ -112,7 +129,7 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
   function handleViewDetail(id: string) {
     setDetailId(id)
     setDetailState({ status: 'loading' })
-    TicketDetails(token, id)
+    api.getDetails(token, id)
       .then(detail => setDetailState({ status: 'ready', detail }))
       .catch(err => {
         if ((err as { status?: number }).status === 401) { onSignout(); return }
@@ -147,7 +164,7 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
 
     setFormState({ status: 'submitting' })
     try {
-      await TicketCreate(token, { request_type_id, department_id, priority_id, description, due_date })
+      await api.createTicket(token, { request_type_id, department_id, priority_id, description, due_date })
       setFormOpen(false)
       setFormState({ status: 'idle' })
       loadTickets()
@@ -165,7 +182,7 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
     if (!message) return
     setMessageState({ status: 'submitting' })
     try {
-      const activity = await ActivityCreateMessage(token, detailState.detail.id, message)
+      const activity = await api.createMessage(token, detailState.detail.id, message)
       setDetailState({
         status: 'ready',
         detail: { ...detailState.detail, activities: [activity, ...detailState.detail.activities] },
