@@ -15,6 +15,10 @@ namespace ticketeer::core::conf {
     settings.OVERLORD_DB_URL = OVERLORD_DB_URL;
   }
 
+  if (const auto *UPLOAD_DIR = std::getenv("UPLOAD_DIR")) {
+    settings.UPLOAD_DIR = UPLOAD_DIR;
+  }
+
   return settings;
 }
 

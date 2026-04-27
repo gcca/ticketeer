@@ -1,5 +1,6 @@
 -- migrate:up
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE SCHEMA IF NOT EXISTS common;
 CREATE SCHEMA IF NOT EXISTS auth;
@@ -142,8 +143,33 @@ CREATE TABLE helpdesk.ticket_activity (
     created_at TIMESTAMPTZ                   NOT NULL DEFAULT now()
 );
 
+CREATE TABLE helpdesk.ticket_activity_attachment (
+    id                  BIGSERIAL PRIMARY KEY,
+    ticket_activity_id  BIGINT      NOT NULL REFERENCES helpdesk.ticket_activity(id),
+    file_path           TEXT        NOT NULL,
+    file_name           TEXT        NOT NULL,
+    file_size           BIGINT      NOT NULL,
+    mime_type           TEXT        NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX ticket_requester_created_at_idx
+ON helpdesk.ticket (requester_id, created_at DESC);
+
+CREATE INDEX ticket_created_at_idx
+ON helpdesk.ticket (created_at DESC);
+
+CREATE INDEX ticket_description_trgm_idx
+ON helpdesk.ticket USING GIN (description gin_trgm_ops);
+
+CREATE INDEX ticket_activity_body_trgm_idx
+ON helpdesk.ticket_activity USING GIN (body gin_trgm_ops);
+
+CREATE INDEX ticket_activity_attachment_ticket_activity_id_idx
+ON helpdesk.ticket_activity_attachment (ticket_activity_id);
+
 CREATE INDEX ticket_activity_ticket_created_at_idx
-ON helpdesk.ticket_activity (ticket_id, created_at);
+ON helpdesk.ticket_activity (ticket_id, created_at DESC, id DESC);
 
 CREATE TRIGGER set_ticket_updated_at
 BEFORE UPDATE ON helpdesk.ticket
@@ -154,6 +180,7 @@ EXECUTE FUNCTION common.set_updated_at();
 -- migrate:down
 -- helpdesk schema
 DROP TRIGGER IF EXISTS set_ticket_updated_at ON helpdesk.ticket;
+DROP TABLE IF EXISTS helpdesk.ticket_activity_attachment;
 DROP TABLE IF EXISTS helpdesk.ticket_activity;
 DROP TYPE  IF EXISTS helpdesk.ticket_activity_kind;
 DROP TABLE IF EXISTS helpdesk.ticket;
@@ -180,4 +207,5 @@ DROP FUNCTION IF EXISTS common.set_updated_at();
 DROP SCHEMA IF EXISTS common;
 
 -- extensions
+DROP EXTENSION IF EXISTS pg_trgm;
 DROP EXTENSION IF EXISTS pgcrypto;
