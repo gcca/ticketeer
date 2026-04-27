@@ -37,6 +37,20 @@ CREATE SCHEMA helpdesk;
 
 
 --
+-- Name: pg_trgm; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pg_trgm; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION pg_trgm IS 'text similarity measurement and index searching based on trigrams';
+
+
+--
 -- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
 --
 
@@ -415,6 +429,40 @@ CREATE TABLE helpdesk.ticket_activity (
 
 
 --
+-- Name: ticket_activity_attachment; Type: TABLE; Schema: helpdesk; Owner: -
+--
+
+CREATE TABLE helpdesk.ticket_activity_attachment (
+    id bigint NOT NULL,
+    ticket_activity_id bigint NOT NULL,
+    file_path text NOT NULL,
+    file_name text NOT NULL,
+    file_size bigint NOT NULL,
+    mime_type text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: ticket_activity_attachment_id_seq; Type: SEQUENCE; Schema: helpdesk; Owner: -
+--
+
+CREATE SEQUENCE helpdesk.ticket_activity_attachment_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: ticket_activity_attachment_id_seq; Type: SEQUENCE OWNED BY; Schema: helpdesk; Owner: -
+--
+
+ALTER SEQUENCE helpdesk.ticket_activity_attachment_id_seq OWNED BY helpdesk.ticket_activity_attachment.id;
+
+
+--
 -- Name: ticket_activity_id_seq; Type: SEQUENCE; Schema: helpdesk; Owner: -
 --
 
@@ -560,6 +608,13 @@ ALTER TABLE ONLY helpdesk.ticket ALTER COLUMN id SET DEFAULT nextval('helpdesk.t
 --
 
 ALTER TABLE ONLY helpdesk.ticket_activity ALTER COLUMN id SET DEFAULT nextval('helpdesk.ticket_activity_id_seq'::regclass);
+
+
+--
+-- Name: ticket_activity_attachment id; Type: DEFAULT; Schema: helpdesk; Owner: -
+--
+
+ALTER TABLE ONLY helpdesk.ticket_activity_attachment ALTER COLUMN id SET DEFAULT nextval('helpdesk.ticket_activity_attachment_id_seq'::regclass);
 
 
 --
@@ -714,6 +769,14 @@ ALTER TABLE ONLY helpdesk.setting
 
 
 --
+-- Name: ticket_activity_attachment ticket_activity_attachment_pkey; Type: CONSTRAINT; Schema: helpdesk; Owner: -
+--
+
+ALTER TABLE ONLY helpdesk.ticket_activity_attachment
+    ADD CONSTRAINT ticket_activity_attachment_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: ticket_activity ticket_activity_pkey; Type: CONSTRAINT; Schema: helpdesk; Owner: -
 --
 
@@ -754,10 +817,45 @@ ALTER TABLE ONLY public.schema_migrations
 
 
 --
+-- Name: ticket_activity_attachment_ticket_activity_id_idx; Type: INDEX; Schema: helpdesk; Owner: -
+--
+
+CREATE INDEX ticket_activity_attachment_ticket_activity_id_idx ON helpdesk.ticket_activity_attachment USING btree (ticket_activity_id);
+
+
+--
+-- Name: ticket_activity_body_trgm_idx; Type: INDEX; Schema: helpdesk; Owner: -
+--
+
+CREATE INDEX ticket_activity_body_trgm_idx ON helpdesk.ticket_activity USING gin (body public.gin_trgm_ops);
+
+
+--
 -- Name: ticket_activity_ticket_created_at_idx; Type: INDEX; Schema: helpdesk; Owner: -
 --
 
-CREATE INDEX ticket_activity_ticket_created_at_idx ON helpdesk.ticket_activity USING btree (ticket_id, created_at);
+CREATE INDEX ticket_activity_ticket_created_at_idx ON helpdesk.ticket_activity USING btree (ticket_id, created_at DESC, id DESC);
+
+
+--
+-- Name: ticket_created_at_idx; Type: INDEX; Schema: helpdesk; Owner: -
+--
+
+CREATE INDEX ticket_created_at_idx ON helpdesk.ticket USING btree (created_at DESC);
+
+
+--
+-- Name: ticket_description_trgm_idx; Type: INDEX; Schema: helpdesk; Owner: -
+--
+
+CREATE INDEX ticket_description_trgm_idx ON helpdesk.ticket USING gin (description public.gin_trgm_ops);
+
+
+--
+-- Name: ticket_requester_created_at_idx; Type: INDEX; Schema: helpdesk; Owner: -
+--
+
+CREATE INDEX ticket_requester_created_at_idx ON helpdesk.ticket USING btree (requester_id, created_at DESC);
 
 
 --
@@ -853,6 +951,14 @@ ALTER TABLE ONLY helpdesk.setting
 
 ALTER TABLE ONLY helpdesk.setting
     ADD CONSTRAINT setting_system_profile_id_fkey FOREIGN KEY (system_profile_id) REFERENCES helpdesk.profile(id);
+
+
+--
+-- Name: ticket_activity_attachment ticket_activity_attachment_ticket_activity_id_fkey; Type: FK CONSTRAINT; Schema: helpdesk; Owner: -
+--
+
+ALTER TABLE ONLY helpdesk.ticket_activity_attachment
+    ADD CONSTRAINT ticket_activity_attachment_ticket_activity_id_fkey FOREIGN KEY (ticket_activity_id) REFERENCES helpdesk.ticket_activity(id);
 
 
 --

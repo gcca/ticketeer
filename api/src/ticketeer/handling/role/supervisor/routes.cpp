@@ -1,10 +1,17 @@
 #include "routes.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 
+#include <drogon/MultiPart.h>
 #include <json/json.h>
 #include <libpq-fe.h>
 #include <quill/Frontend.h>
@@ -24,6 +31,14 @@ struct TicketLookup {
   Json::Value ticket;
 };
 
+struct AttachmentFile {
+  std::string file_path;
+  std::string file_name;
+  std::string mime_type;
+};
+
+inline constexpr std::size_t MaxAttachmentSize = 5 * 1024 * 1024;
+
 inline void BadRequest(const Callback &callback, const char *msg,
                        drogon::HttpStatusCode code = drogon::k400BadRequest) {
   Json::Value error;
@@ -35,6 +50,79 @@ inline void BadRequest(const Callback &callback, const char *msg,
 
 [[nodiscard]] inline PGconn *ConnectDB() {
   return PQconnectdb(ticketeer::core::conf::settings.DB_URL.c_str());
+}
+
+[[nodiscard]] inline std::string
+AttachmentDownloadUrl(const std::string &ticket_id,
+                      const std::string &activity_id,
+                      const std::string &attachment_id) {
+  return "/ticketeer/api/role/supervisor/v1/ticket/" + ticket_id +
+         "/activity/" + activity_id + "/attachment/" + attachment_id +
+         "/download";
+}
+
+[[nodiscard]] inline std::string ToLower(std::string value) {
+  std::transform(
+      value.begin(), value.end(), value.begin(),
+      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return value;
+}
+
+[[nodiscard]] inline std::string InferMimeType(const std::string &file_name) {
+  const auto ext =
+      ToLower(std::filesystem::path(file_name).extension().string());
+  static const std::unordered_map<std::string, std::string> mime_types = {
+      {".txt", "text/plain"},
+      {".csv", "text/csv"},
+      {".html", "text/html"},
+      {".htm", "text/html"},
+      {".json", "application/json"},
+      {".xml", "application/xml"},
+      {".pdf", "application/pdf"},
+      {".png", "image/png"},
+      {".jpg", "image/jpeg"},
+      {".jpeg", "image/jpeg"},
+      {".gif", "image/gif"},
+      {".webp", "image/webp"},
+      {".svg", "image/svg+xml"},
+      {".zip", "application/zip"},
+      {".doc", "application/msword"},
+      {".docx", "application/"
+                "vnd.openxmlformats-officedocument.wordprocessingml.document"},
+      {".xls", "application/vnd.ms-excel"},
+      {".xlsx",
+       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+      {".ppt", "application/vnd.ms-powerpoint"},
+      {".pptx",
+       "application/"
+       "vnd.openxmlformats-officedocument.presentationml.presentation"}};
+  const auto it = mime_types.find(ext);
+  return it == mime_types.end() ? "application/octet-stream" : it->second;
+}
+
+[[nodiscard]] inline bool WriteFile(const std::filesystem::path &path,
+                                    std::string_view content) {
+  std::error_code ec;
+  std::filesystem::create_directories(path.parent_path(), ec);
+  if (ec) {
+    return false;
+  }
+
+  std::ofstream out(path, std::ios::binary | std::ios::trunc);
+  if (!out) {
+    return false;
+  }
+  out.write(content.data(), static_cast<std::streamsize>(content.size()));
+  return out.good();
+}
+
+[[nodiscard]] inline std::filesystem::path
+AttachmentAbsolutePath(const std::string &file_path,
+                       const std::string &file_name) {
+  return std::filesystem::current_path() /
+         ticketeer::core::conf::settings.UPLOAD_DIR /
+         std::filesystem::path(file_path) /
+         std::filesystem::path(file_name).filename();
 }
 
 [[nodiscard]] inline std::optional<std::string>
@@ -309,12 +397,44 @@ SELECT ta.id::text,
 
   Json::Value result = Json::arrayValue;
   for (int i = 0; i < PQntuples(activities); ++i) {
+    const std::string activity_id = PQgetvalue(activities, i, 0);
     Json::Value activity;
-    activity["id"] = PQgetvalue(activities, i, 0);
+    activity["id"] = activity_id;
     activity["kind"] = PQgetvalue(activities, i, 1);
     activity["body"] = PQgetvalue(activities, i, 2);
     activity["created_at"] = PQgetvalue(activities, i, 3);
     activity["profile_name"] = PQgetvalue(activities, i, 4);
+    activity["attachments"] = Json::arrayValue;
+
+    const char *attachment_params[] = {activity_id.c_str()};
+    PGresult *attachments =
+        PQexecParams(pg,
+                     R"SQL(
+SELECT id::text,
+       file_name
+  FROM helpdesk.ticket_activity_attachment
+ WHERE ticket_activity_id = $1::bigint
+ ORDER BY created_at ASC,
+          id ASC
+)SQL",
+                     1, nullptr, attachment_params, nullptr, nullptr, 0);
+
+    if (PQresultStatus(attachments) != PGRES_TUPLES_OK) {
+      LOGJ_DEBUG(logger, "[supervisor] ticket activity attachment list error",
+                 PQresultErrorMessage(attachments));
+      PQclear(attachments);
+      return {TicketLookupStatus::QueryFailed, Json::Value{}};
+    }
+
+    for (int j = 0; j < PQntuples(attachments); ++j) {
+      const std::string attachment_id = PQgetvalue(attachments, j, 0);
+      Json::Value attachment;
+      attachment["id"] = attachment_id;
+      attachment["file_name"] = PQgetvalue(attachments, j, 1);
+      activity["attachments"].append(attachment);
+    }
+    PQclear(attachments);
+
     result.append(activity);
   }
   PQclear(activities);
@@ -352,6 +472,124 @@ RETURNING id::text, kind::text, body, created_at::text,
   activity["profile_name"] = PQgetvalue(insert_res, 0, 4);
   PQclear(insert_res);
   return activity;
+}
+
+[[nodiscard]] inline bool TicketActivityExists(quill::Logger *logger,
+                                               PGconn *pg,
+                                               const std::string &ticket_id,
+                                               const std::string &activity_id) {
+  const char *params[] = {ticket_id.c_str(), activity_id.c_str()};
+  PGresult *res = PQexecParams(pg,
+                               R"SQL(
+SELECT id::text
+  FROM helpdesk.ticket_activity
+ WHERE ticket_id = $1::bigint
+   AND id = $2::bigint
+)SQL",
+                               2, nullptr, params, nullptr, nullptr, 0);
+
+  if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+    LOGJ_DEBUG(logger, "[supervisor] ticket activity query error",
+               PQresultErrorMessage(res));
+    PQclear(res);
+    return false;
+  }
+
+  const bool exists = PQntuples(res) == 1;
+  PQclear(res);
+  return exists;
+}
+
+[[nodiscard]] inline std::optional<std::string>
+NextTicketActivityAttachmentId(quill::Logger *logger, PGconn *pg) {
+  PGresult *res = PQexecParams(pg,
+                               R"SQL(
+SELECT nextval(pg_get_serial_sequence('helpdesk.ticket_activity_attachment', 'id'))::text
+)SQL",
+                               0, nullptr, nullptr, nullptr, nullptr, 0);
+  if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) != 1) {
+    LOGJ_DEBUG(logger, "[supervisor] next attachment id query error",
+               PQresultErrorMessage(res));
+    PQclear(res);
+    return std::nullopt;
+  }
+
+  std::string attachment_id = PQgetvalue(res, 0, 0);
+  PQclear(res);
+  return attachment_id;
+}
+
+[[nodiscard]] inline std::optional<Json::Value> TicketActivityAttachmentCreate(
+    quill::Logger *logger, PGconn *pg, const std::string &attachment_id,
+    const std::string &activity_id, const std::string &file_path,
+    const std::string &file_name, std::size_t file_size,
+    const std::string &mime_type) {
+  const std::string file_size_str = std::to_string(file_size);
+  const char *params[] = {attachment_id.c_str(), activity_id.c_str(),
+                          file_path.c_str(),     file_name.c_str(),
+                          file_size_str.c_str(), mime_type.c_str()};
+  PGresult *insert_res = PQexecParams(pg,
+                                      R"SQL(
+INSERT INTO helpdesk.ticket_activity_attachment
+       (id, ticket_activity_id, file_path, file_name, file_size, mime_type)
+VALUES ($1::bigint, $2::bigint, $3, $4, $5::bigint, $6)
+RETURNING id::text, ticket_activity_id::text, file_path, file_name,
+          file_size::text, mime_type, created_at::text
+)SQL",
+                                      6, nullptr, params, nullptr, nullptr, 0);
+
+  if (PQresultStatus(insert_res) != PGRES_TUPLES_OK ||
+      PQntuples(insert_res) != 1) {
+    LOGJ_DEBUG(logger, "[supervisor] insert attachment error",
+               PQresultErrorMessage(insert_res));
+    PQclear(insert_res);
+    return std::nullopt;
+  }
+
+  Json::Value attachment;
+  attachment["id"] = PQgetvalue(insert_res, 0, 0);
+  attachment["ticket_activity_id"] = PQgetvalue(insert_res, 0, 1);
+  attachment["file_path"] = PQgetvalue(insert_res, 0, 2);
+  attachment["file_name"] = PQgetvalue(insert_res, 0, 3);
+  attachment["file_size"] = PQgetvalue(insert_res, 0, 4);
+  attachment["mime_type"] = PQgetvalue(insert_res, 0, 5);
+  attachment["created_at"] = PQgetvalue(insert_res, 0, 6);
+  PQclear(insert_res);
+  return attachment;
+}
+
+[[nodiscard]] inline std::optional<AttachmentFile>
+FetchTicketActivityAttachmentFile(quill::Logger *logger, PGconn *pg,
+                                  const std::string &ticket_id,
+                                  const std::string &activity_id,
+                                  const std::string &attachment_id) {
+  const char *params[] = {ticket_id.c_str(), activity_id.c_str(),
+                          attachment_id.c_str()};
+  PGresult *res = PQexecParams(pg,
+                               R"SQL(
+SELECT taa.file_path,
+       taa.file_name,
+       taa.mime_type
+  FROM helpdesk.ticket_activity_attachment taa
+  JOIN helpdesk.ticket_activity ta
+    ON ta.id = taa.ticket_activity_id
+ WHERE ta.ticket_id = $1::bigint
+   AND ta.id = $2::bigint
+   AND taa.id = $3::bigint
+)SQL",
+                               3, nullptr, params, nullptr, nullptr, 0);
+
+  if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) != 1) {
+    LOGJ_DEBUG(logger, "[supervisor] attachment download query error",
+               PQresultErrorMessage(res));
+    PQclear(res);
+    return std::nullopt;
+  }
+
+  AttachmentFile file{PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 1),
+                      PQgetvalue(res, 0, 2)};
+  PQclear(res);
+  return file;
 }
 
 } // namespace
@@ -616,6 +854,135 @@ SELECT id::text
   PQfinish(pg);
 
   callback(drogon::HttpResponse::newHttpJsonResponse(*activity));
+}
+
+void Supervisor::TicketActivityAttachmentCreate(
+    const drogon::HttpRequestPtr &req,
+    std::function<void(const drogon::HttpResponsePtr &)> &&callback,
+    const std::string &ticket_id, const std::string &activity_id) {
+  auto *logger = quill::Frontend::get_logger("root");
+  const auto auth_header = req->getHeader("Authorization");
+  if (auth_header.empty() || auth_header.rfind("Bearer ", 0) != 0)
+    return BadRequest(callback, "Missing Authorization");
+
+  if (req->contentType() != drogon::CT_MULTIPART_FORM_DATA)
+    return BadRequest(callback, "Content-Type must be multipart/form-data");
+
+  drogon::MultiPartParser parser;
+  if (parser.parse(req) != 0)
+    return BadRequest(callback, "Invalid multipart form-data");
+
+  const auto &files = parser.getFiles();
+  if (files.empty())
+    return BadRequest(callback, "Missing file");
+
+  const auto &file = files.front();
+  const std::string file_name =
+      std::filesystem::path(file.getFileName()).filename().string();
+  if (file_name.empty())
+    return BadRequest(callback, "Missing file name");
+
+  const auto file_size = file.fileLength();
+  if (file_size > MaxAttachmentSize)
+    return BadRequest(callback, "File exceeds 5MB limit",
+                      drogon::k413RequestEntityTooLarge);
+
+  const std::string token = auth_header.substr(7);
+
+  PGconn *pg = ConnectDB();
+  if (PQstatus(pg) != CONNECTION_OK) {
+    PQfinish(pg);
+    return BadRequest(callback, "Database unavailable",
+                      drogon::k503ServiceUnavailable);
+  }
+
+  auto profile_id = FetchProfileId(logger, pg, token);
+  if (!profile_id) {
+    PQfinish(pg);
+    return BadRequest(callback, "Forbidden: insufficient permissions",
+                      drogon::k403Forbidden);
+  }
+
+  if (!TicketActivityExists(logger, pg, ticket_id, activity_id)) {
+    PQfinish(pg);
+    return BadRequest(callback, "Ticket activity not found",
+                      drogon::k404NotFound);
+  }
+
+  auto attachment_id = NextTicketActivityAttachmentId(logger, pg);
+  if (!attachment_id) {
+    PQfinish(pg);
+    return BadRequest(callback, "Failed to create attachment");
+  }
+
+  const std::filesystem::path relative_path =
+      std::filesystem::path("role") / ("ticket_id=" + ticket_id) /
+      ("activity_id=" + activity_id) / ("attachment_id=" + *attachment_id);
+  const std::filesystem::path absolute_path =
+      std::filesystem::current_path() /
+      ticketeer::core::conf::settings.UPLOAD_DIR / relative_path;
+
+  if (!WriteFile(absolute_path / file_name, file.fileContent())) {
+    PQfinish(pg);
+    return BadRequest(callback, "Failed to save attachment");
+  }
+
+  const std::string file_path = relative_path.generic_string();
+  auto attachment = ::TicketActivityAttachmentCreate(
+      logger, pg, *attachment_id, activity_id, file_path, file_name, file_size,
+      InferMimeType(file_name));
+  if (!attachment) {
+    std::error_code ec;
+    std::filesystem::remove(absolute_path / file_name, ec);
+    PQfinish(pg);
+    return BadRequest(callback, "Failed to create attachment");
+  }
+
+  PQfinish(pg);
+  callback(drogon::HttpResponse::newHttpJsonResponse(*attachment));
+}
+
+void Supervisor::TicketActivityAttachmentDownload(
+    const drogon::HttpRequestPtr &req,
+    std::function<void(const drogon::HttpResponsePtr &)> &&callback,
+    const std::string &ticket_id, const std::string &activity_id,
+    const std::string &attachment_id) {
+  auto *logger = quill::Frontend::get_logger("root");
+  const auto auth_header = req->getHeader("Authorization");
+  if (auth_header.empty() || auth_header.rfind("Bearer ", 0) != 0)
+    return BadRequest(callback, "Missing Authorization");
+
+  PGconn *pg = ConnectDB();
+  if (PQstatus(pg) != CONNECTION_OK) {
+    PQfinish(pg);
+    return BadRequest(callback, "Database unavailable",
+                      drogon::k503ServiceUnavailable);
+  }
+
+  const std::string token = auth_header.substr(7);
+  auto profile_id = FetchProfileId(logger, pg, token);
+  if (!profile_id) {
+    PQfinish(pg);
+    return BadRequest(callback, "Forbidden: insufficient permissions",
+                      drogon::k403Forbidden);
+  }
+
+  auto file = FetchTicketActivityAttachmentFile(logger, pg, ticket_id,
+                                                activity_id, attachment_id);
+  PQfinish(pg);
+
+  if (!file)
+    return BadRequest(callback, "Attachment not found", drogon::k404NotFound);
+
+  const auto absolute_path =
+      AttachmentAbsolutePath(file->file_path, file->file_name);
+  if (!std::filesystem::is_regular_file(absolute_path))
+    return BadRequest(callback, "Attachment file not found",
+                      drogon::k404NotFound);
+
+  callback(drogon::HttpResponse::newFileResponse(
+      absolute_path.string(), file->file_name, drogon::CT_CUSTOM,
+      file->mime_type, req));
 }
 
 } // namespace ticketeer::api::role

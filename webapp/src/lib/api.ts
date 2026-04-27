@@ -132,12 +132,18 @@ export async function TicketCreate(token: string, input: CreateTicketInput): Pro
   return res.json() as Promise<CreatedTicket>
 }
 
+export type ActivityAttachment = {
+  id: string
+  file_name: string
+}
+
 export type TicketActivityDetail = {
   id: string
   kind: string
   body: string
   created_at: string
   profile_name: string
+  attachments?: ActivityAttachment[]
 }
 
 export type TicketDetail = {
@@ -266,4 +272,42 @@ export async function SupervisorActivityCreateMessage(
     throw Object.assign(new Error(err.message ?? res.statusText), { status: res.status })
   }
   return res.json() as Promise<TicketActivityDetail>
+}
+
+export type CreatedAttachment = {
+  id: string
+  ticket_activity_id: string
+  file_path: string
+  file_name: string
+  file_size: string
+  mime_type: string
+  created_at: string
+}
+
+export async function SupervisorAttachmentCreate(
+  token: string,
+  ticket_id: string,
+  activity_id: string,
+  file: File,
+): Promise<CreatedAttachment> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${SUPERVISOR}/ticket/${ticket_id}/activity/${activity_id}/attachment/create`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string }
+    throw Object.assign(new Error(err.message ?? res.statusText), { status: res.status })
+  }
+  return res.json() as Promise<CreatedAttachment>
+}
+
+export function SupervisorAttachmentDownloadUrl(
+  ticket_id: string,
+  activity_id: string,
+  attachment_id: string,
+): string {
+  return `${SUPERVISOR}/ticket/${ticket_id}/activity/${activity_id}/attachment/${attachment_id}/download`
 }

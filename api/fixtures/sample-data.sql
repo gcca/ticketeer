@@ -302,3 +302,22 @@ format(
 FROM expanded_ticket_activity
 JOIN activity_body_catalog USING (seq)
 ORDER BY id, seq;
+
+INSERT INTO helpdesk.ticket_activity_attachment
+    (ticket_activity_id, file_path, file_name, file_size, mime_type, created_at)
+VALUES
+    (10, 'role/ticket_id=2/activity_id=10/attachment_id=1', 'error_log.txt', 2048, 'text/plain', now()-'20 days'::interval),
+    (20, 'role/ticket_id=4/activity_id=20/attachment_id=2', 'screenshot.png', 153600, 'image/png', now()-'18 days'::interval),
+    (30, 'role/ticket_id=6/activity_id=30/attachment_id=3', 'manual.pdf', 2097152, 'application/pdf', now()-'15 days'::interval),
+    (40, 'role/ticket_id=8/activity_id=40/attachment_id=4', 'config_backup.xlsx', 512000, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', now()-'12 days'::interval),
+    (50, 'role/ticket_id=10/activity_id=50/attachment_id=5', 'photo.jpg', 1024000, 'image/jpeg', now()-'10 days'::interval),
+    (60, 'role/ticket_id=12/activity_id=60/attachment_id=6', 'report.docx', 768000, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', now()-'8 days'::interval),
+    (70, 'role/ticket_id=14/activity_id=70/attachment_id=7', 'network_diag.txt', 4096, 'text/plain', now()-'6 days'::interval),
+    (80, 'role/ticket_id=16/activity_id=80/attachment_id=8', 'diagram.png', 256000, 'image/png', now()-'5 days'::interval),
+    (90, 'role/ticket_id=18/activity_id=90/attachment_id=9', 'invoice.pdf', 1536000, 'application/pdf', now()-'4 days'::interval),
+    (100, 'role/ticket_id=20/activity_id=100/attachment_id=10', 'code_sample.py', 1024, 'text/plain', now()-'3 days'::interval),
+    (110, 'role/ticket_id=22/activity_id=110/attachment_id=11', 'presentation.pptx', 3145728, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', now()-'2 days'::interval),
+    (120, 'role/ticket_id=24/activity_id=120/attachment_id=12', 'logfile.log', 8192, 'text/plain', now()-'1 day'::interval),
+    (130, 'role/ticket_id=26/activity_id=130/attachment_id=13', 'certificate.crt', 2048, 'application/x-x509-ca-cert', now()-'12 hours'::interval),
+    (140, 'role/ticket_id=28/activity_id=140/attachment_id=14', 'backup.zip', 5242880, 'application/zip', now()-'6 hours'::interval),
+    (150, 'role/ticket_id=30/activity_id=150/attachment_id=15', 'readme.md', 512, 'text/markdown', now()-'1 hour'::interval);

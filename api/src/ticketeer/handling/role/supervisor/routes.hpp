@@ -32,6 +32,17 @@ public:
              "ticketeer::api::auth::middlewares::LogInRequired",
              "ticketeer::api::role::supervisor::middlewares::"
              "RoleSupervisorRequired");
+  METHOD_ADD(Supervisor::TicketActivityAttachmentCreate,
+             "/v1/ticket/{ticket_id}/activity/{activity_id}/attachment/create",
+             drogon::Post, "ticketeer::api::auth::middlewares::LogInRequired",
+             "ticketeer::api::role::supervisor::middlewares::"
+             "RoleSupervisorRequired");
+  METHOD_ADD(Supervisor::TicketActivityAttachmentDownload,
+             "/v1/ticket/{ticket_id}/activity/{activity_id}/attachment/"
+             "{attachment_id}/download",
+             drogon::Get, "ticketeer::api::auth::middlewares::LogInRequired",
+             "ticketeer::api::role::supervisor::middlewares::"
+             "RoleSupervisorRequired");
   METHOD_LIST_END
 
   void
@@ -56,6 +67,17 @@ public:
       const drogon::HttpRequestPtr &req,
       std::function<void(const drogon::HttpResponsePtr &)> &&callback,
       const std::string &ticket_id);
+
+  void TicketActivityAttachmentCreate(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback,
+      const std::string &ticket_id, const std::string &activity_id);
+
+  void TicketActivityAttachmentDownload(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback,
+      const std::string &ticket_id, const std::string &activity_id,
+      const std::string &attachment_id);
 };
 
 } // namespace ticketeer::api::role

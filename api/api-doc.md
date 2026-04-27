@@ -1018,6 +1018,161 @@ Available endpoints:
 | `GET` | `/ticketeer/api/role/supervisor/v1/ticket/{ticket_id}/details` | `GET /ticketeer/api/role/requester/v1/ticket/{ticket_id}/details` |
 | `GET` | `/ticketeer/api/role/supervisor/v1/ticket/{ticket_id}/activity/list` | `GET /ticketeer/api/role/requester/v1/ticket/{ticket_id}/activity/list` |
 | `POST` | `/ticketeer/api/role/supervisor/v1/ticket/{ticket_id}/activity/create/message` | `POST /ticketeer/api/role/requester/v1/ticket/{ticket_id}/activity/create/message` |
+| `POST` | `/ticketeer/api/role/supervisor/v1/ticket/{ticket_id}/activity/{activity_id}/attachment/create` | Supervisor only |
+| `GET` | `/ticketeer/api/role/supervisor/v1/ticket/{ticket_id}/activity/{activity_id}/attachment/{attachment_id}/download` | Supervisor only |
+
+Supervisor `GET /v1/ticket/{ticket_id}/details` and
+`GET /v1/ticket/{ticket_id}/activity/list` include an `attachments` array on
+each activity:
+
+```json
+{
+  "id": "3",
+  "kind": "message",
+  "body": "Received. We will remove the equipment to check power supply, battery and motherboard.",
+  "created_at": "2024-04-26T08:14:39Z",
+  "profile_name": "Jill Valentine",
+  "attachments": [
+    {
+      "id": "7",
+      "file_name": "invoice.pdf"
+    }
+  ]
+}
+```
+
+Attachment contract:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `activities[].attachments` | array | Files attached to the activity |
+| `activities[].attachments[].id` | string | Attachment ID for constructing download URLs |
+| `activities[].attachments[].file_name` | string | Uploaded file name |
+
+Download URLs can be constructed using the pattern: `/ticketeer/api/role/supervisor/v1/ticket/{ticket_id}/activity/{activity_id}/attachment/{attachment_id}/download`
+
+## POST `/role/supervisor/v1/ticket/{ticket_id}/activity/{activity_id}/attachment/create`
+
+Uploads a file and creates a `helpdesk.ticket_activity_attachment` record for
+an existing ticket activity. The file is stored under `UPLOAD_DIR` using this
+relative path:
+
+```text
+role/ticket_id={ticket_id}/activity_id={activity_id}/attachment_id={attachment_id}
+```
+
+Full URL:
+
+```text
+/role/supervisor/v1/ticket/{ticket_id}/activity/{activity_id}/attachment/create
+```
+
+### Request
+
+```http
+POST /ticketeer/api/role/supervisor/v1/ticket/1/activity/3/attachment/create
+Authorization: Bearer ticketeer-v1_<token>
+Content-Type: multipart/form-data
+```
+
+Path parameters:
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `ticket_id` | string | Ticket ID |
+| `activity_id` | string | Ticket activity ID. The activity must belong to the ticket. |
+
+Contract:
+
+| Field | Location | Type | Required | Description |
+| --- | --- | --- | --- | --- |
+| `Authorization` | Header | string | Yes | Must have format `Bearer <token>`. The user must have role `supervisor`. |
+| `file` | Form data | file | Yes | Uploaded file. Maximum size is 5 MB. |
+
+The server infers `mime_type` from the uploaded file extension. Unknown
+extensions use `application/octet-stream`.
+
+### Response `200`
+
+```json
+{
+  "id": "7",
+  "ticket_activity_id": "3",
+  "file_path": "role/ticket_id=1/activity_id=3/attachment_id=7",
+  "file_name": "invoice.pdf",
+  "file_size": "104857",
+  "mime_type": "application/pdf",
+  "created_at": "2024-04-26T08:14:39Z"
+}
+```
+
+Contract:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Created attachment ID |
+| `ticket_activity_id` | string | Activity ID that owns the attachment |
+| `file_path` | string | Relative storage path without the file name |
+| `file_name` | string | Uploaded file name |
+| `file_size` | string | Uploaded file size in bytes |
+| `mime_type` | string | MIME type inferred from the extension |
+| `created_at` | string | Creation timestamp |
+
+### Errors
+
+| Code | Body | Cause |
+| --- | --- | --- |
+| `400` | `{"message":"Missing Authorization"}` | Missing `Authorization` header or does not start with `Bearer ` |
+| `400` | `{"message":"Content-Type must be multipart/form-data"}` | Request is not multipart form data |
+| `400` | `{"message":"Invalid multipart form-data"}` | Multipart body could not be parsed |
+| `400` | `{"message":"Missing file"}` | No uploaded file was sent |
+| `400` | `{"message":"Missing file name"}` | Uploaded file does not have a file name |
+| `413` | `{"message":"File exceeds 5MB limit"}` | Uploaded file is larger than 5 MB |
+| `403` | `{"message":"Forbidden: insufficient permissions"}` | The token does not exist, expired or the user does not have role `supervisor` |
+| `404` | `{"message":"Ticket activity not found"}` | The activity does not exist or does not belong to the ticket |
+| `400` | `{"message":"Failed to save attachment"}` | Could not write the file to disk |
+| `400` | `{"message":"Failed to create attachment"}` | Could not reserve or insert the attachment record |
+| `503` | `{"message":"Database unavailable"}` | Could not connect to `DB_URL` |
+
+## GET `/role/supervisor/v1/ticket/{ticket_id}/activity/{activity_id}/attachment/{attachment_id}/download`
+
+Downloads an attachment file. The endpoint requires a supervisor token and
+verifies that the attachment belongs to the requested activity and ticket.
+
+Full URL:
+
+```text
+/role/supervisor/v1/ticket/{ticket_id}/activity/{activity_id}/attachment/{attachment_id}/download
+```
+
+### Request
+
+```http
+GET /ticketeer/api/role/supervisor/v1/ticket/1/activity/3/attachment/7/download
+Authorization: Bearer ticketeer-v1_<token>
+```
+
+Path parameters:
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `ticket_id` | string | Ticket ID |
+| `activity_id` | string | Ticket activity ID |
+| `attachment_id` | string | Attachment ID |
+
+### Response `200`
+
+Returns the file as an attachment. The content type is the stored `mime_type`.
+
+### Errors
+
+| Code | Body | Cause |
+| --- | --- | --- |
+| `400` | `{"message":"Missing Authorization"}` | Missing `Authorization` header or does not start with `Bearer ` |
+| `403` | `{"message":"Forbidden: insufficient permissions"}` | The token does not exist, expired or the user does not have role `supervisor` |
+| `404` | `{"message":"Attachment not found"}` | The attachment does not exist or does not belong to the activity and ticket |
+| `404` | `{"message":"Attachment file not found"}` | The database record exists but the file is missing on disk |
+| `503` | `{"message":"Database unavailable"}` | Could not connect to `DB_URL` |
 
 ### Authorization
 
@@ -1046,6 +1201,10 @@ http GET http://localhost:5521/ticketeer/api/role/supervisor/v1/ticket/list Auth
 http GET http://localhost:5521/ticketeer/api/role/supervisor/v1/ticket/1/details Authorization:"Bearer $TOKEN"
 
 http POST http://localhost:5521/ticketeer/api/role/supervisor/v1/ticket/1/activity/create/message Authorization:"Bearer $TOKEN" message="Supervisor follow-up"
+
+http --form POST http://localhost:5521/ticketeer/api/role/supervisor/v1/ticket/1/activity/3/attachment/create Authorization:"Bearer $TOKEN" file@./invoice.pdf
+
+http GET http://localhost:5521/ticketeer/api/role/supervisor/v1/ticket/1/activity/3/attachment/7/download Authorization:"Bearer $TOKEN"
 ```
 
 ## Test Data

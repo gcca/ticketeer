@@ -8,6 +8,7 @@ import {
   TicketDetails,
   TicketList,
   type CreateTicketInput,
+  type CreatedAttachment,
   type CreatedTicket,
   type Department,
   type Priority,
@@ -23,6 +24,8 @@ export type TicketsPageApi = {
   createTicket: (token: string, input: CreateTicketInput) => Promise<CreatedTicket>
   getDetails: (token: string, id: string) => Promise<TicketDetail>
   createMessage: (token: string, ticketId: string, message: string) => Promise<TicketActivityDetail>
+  uploadAttachment?: (token: string, ticketId: string, activityId: string, file: File) => Promise<CreatedAttachment>
+  attachmentDownloadUrl?: (ticketId: string, activityId: string, attachmentId: string) => string
 }
 
 const defaultApi: TicketsPageApi = {
@@ -110,6 +113,9 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
   const [messageOpen, setMessageOpen] = useState(false)
   const [messageState, setMessageState] = useState<MessageState>({ status: 'idle' })
   const messageRef = useRef<HTMLTextAreaElement>(null)
+  const [uploadingActivityId, setUploadingActivityId] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [page, setPage] = useState(1)
@@ -221,6 +227,36 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
     }
   }
 
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    const activityId = e.target.dataset.activityId
+    e.target.value = ''
+    if (!file || !activityId || !api.uploadAttachment || detailState?.status !== 'ready') {
+      setUploadingActivityId(null)
+      return
+    }
+    try {
+      const att = await api.uploadAttachment(token, detailState.detail.id, activityId, file)
+      setDetailState({
+        status: 'ready',
+        detail: {
+          ...detailState.detail,
+          activities: detailState.detail.activities.map(a =>
+            a.id === activityId
+              ? { ...a, attachments: [...(a.attachments ?? []), { id: att.id, file_name: att.file_name }] }
+              : a
+          ),
+        },
+      })
+      setUploadError(null)
+    } catch (err) {
+      if ((err as { status?: number }).status === 401) { onSignout(); return }
+      setUploadError(err instanceof Error ? err.message : 'Error al subir el archivo.')
+    } finally {
+      setUploadingActivityId(null)
+    }
+  }
+
   const isSubmitting = formState.status === 'submitting'
 
   // ── Detail view ──────────────────────────────────────────────────────────────
@@ -317,6 +353,46 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
                               <span className="text-xs text-muted-foreground">{formatDateTime(a.created_at)}</span>
                             </div>
                             <p className="text-sm leading-relaxed">{a.body}</p>
+                            {a.attachments && a.attachments.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {a.attachments.map(att => (
+                                  <a
+                                    key={att.id}
+                                    href={api.attachmentDownloadUrl!(detail.id, a.id, att.id)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                    {att.file_name}
+                                  </a>
+                                ))}
+                              </div>
+                            )}
+                            {api.uploadAttachment && (
+                              <div className="mt-2">
+                                {uploadingActivityId === a.id ? (
+                                  <span className="text-xs text-muted-foreground">Subiendo…</span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setUploadingActivityId(a.id)
+                                      setUploadError(null)
+                                      fileInputRef.current && (fileInputRef.current.dataset.activityId = a.id)
+                                      fileInputRef.current?.click()
+                                    }}
+                                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                                    Adjuntar archivo
+                                  </button>
+                                )}
+                                {uploadingActivityId === a.id && uploadError && (
+                                  <p role="alert" className="text-xs text-destructive mt-1">{uploadError}</p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -327,6 +403,15 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
             </div>
           )
         })()}
+        {api.uploadAttachment && (
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileChange}
+            aria-hidden="true"
+          />
+        )}
       </div>
     )
   }

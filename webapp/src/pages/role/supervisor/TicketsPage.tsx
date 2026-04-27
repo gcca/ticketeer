@@ -1,5 +1,7 @@
 import {
   SupervisorActivityCreateMessage,
+  SupervisorAttachmentCreate,
+  SupervisorAttachmentDownloadUrl,
   SupervisorTicketCreate,
   SupervisorTicketDetails,
   SupervisorTicketList,
@@ -15,6 +17,8 @@ const supervisorApi: TicketsPageApi = {
   createTicket: SupervisorTicketCreate,
   getDetails: SupervisorTicketDetails,
   createMessage: SupervisorActivityCreateMessage,
+  uploadAttachment: SupervisorAttachmentCreate,
+  attachmentDownloadUrl: SupervisorAttachmentDownloadUrl,
 }
 
 type Props = {
