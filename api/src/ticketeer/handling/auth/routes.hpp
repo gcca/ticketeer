@@ -2,6 +2,8 @@
 
 #include <drogon/HttpController.h>
 
+#include "ticketeer/handling/auth/middlewares.hpp"
+
 namespace ticketeer::api {
 
 class Auth : public drogon::HttpController<Auth> {
@@ -9,8 +11,10 @@ public:
   METHOD_LIST_BEGIN
   METHOD_ADD(Auth::SignIn, "/v1/signin", drogon::Post);
   METHOD_ADD(Auth::SignIn_Overlord, "/v1/signin/overlord", drogon::Post);
-  METHOD_ADD(Auth::Me, "/v1/me", drogon::Get);
-  METHOD_ADD(Auth::SignOut, "/v1/signout", drogon::Post);
+  METHOD_ADD(Auth::Me, "/v1/me", drogon::Get,
+             "ticketeer::api::auth::middlewares::LogInRequired");
+  METHOD_ADD(Auth::SignOut, "/v1/signout", drogon::Post,
+             "ticketeer::api::auth::middlewares::LogInRequired");
   METHOD_LIST_END
 
   void SignIn(const drogon::HttpRequestPtr &req,

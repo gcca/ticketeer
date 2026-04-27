@@ -14,8 +14,10 @@ add_executable(
   ticketeer-api
   src/ticketeer-api.cc
   src/ticketeer/core/conf.cpp
+  src/ticketeer/handling/auth/middlewares.cpp
   src/ticketeer/handling/auth/routes.cpp
   src/ticketeer/handling/dashboard/routes.cpp
+  src/ticketeer/handling/role/requester/middlewares.cpp
   src/ticketeer/handling/role/requester/routes.cpp)
 
 target_include_directories(
