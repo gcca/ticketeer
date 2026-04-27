@@ -18,7 +18,9 @@ add_executable(
   src/ticketeer/handling/auth/routes.cpp
   src/ticketeer/handling/dashboard/routes.cpp
   src/ticketeer/handling/role/requester/middlewares.cpp
-  src/ticketeer/handling/role/requester/routes.cpp)
+  src/ticketeer/handling/role/requester/routes.cpp
+  src/ticketeer/handling/role/supervisor/middlewares.cpp
+  src/ticketeer/handling/role/supervisor/routes.cpp)
 
 target_include_directories(
   ticketeer-api PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src

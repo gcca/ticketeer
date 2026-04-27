@@ -107,7 +107,7 @@ INSERT INTO helpdesk.profile (user_id, department_id, role, name) VALUES
     );
 
 INSERT INTO helpdesk.setting
-    (name, default_status_id, assigned_status_id, default_department_id, system_user_id)
+    (name, default_status_id, assigned_status_id, default_department_id, system_profile_id)
 VALUES (
     'default',
     (SELECT id FROM helpdesk.ticket_status WHERE name = 'unassigned'),
@@ -182,7 +182,7 @@ WITH ticket_activity_seed AS (
         t.status_id,
         t.created_at,
         t.updated_at,
-        hs.system_user_id,
+        hs.system_profile_id,
         (6 + (t.id % 3))::int AS activity_count
     FROM helpdesk.ticket t
     CROSS JOIN helpdesk.setting hs
@@ -266,7 +266,7 @@ INSERT INTO helpdesk.ticket_activity
 SELECT
     id,
     CASE
-        WHEN seq IN (1, 4, 6, 7) THEN system_user_id
+        WHEN seq IN (1, 4, 6, 7) THEN system_profile_id
         WHEN seq IN (3, 5) AND assigned_to_id IS NOT NULL THEN assigned_to_id
         ELSE requester_id
     END,

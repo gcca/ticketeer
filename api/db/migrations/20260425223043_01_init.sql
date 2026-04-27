@@ -101,11 +101,12 @@ CREATE TABLE helpdesk.request_type (
 );
 
 CREATE TABLE helpdesk.setting (
-    name                  TEXT   PRIMARY KEY DEFAULT 'default',
-    default_status_id     BIGINT NOT NULL REFERENCES helpdesk.ticket_status(id),
-    assigned_status_id    BIGINT NOT NULL REFERENCES helpdesk.ticket_status(id),
-    default_department_id BIGINT NOT NULL REFERENCES helpdesk.department(id),
-    system_user_id        BIGINT NOT NULL REFERENCES helpdesk.profile(id)
+    name                   TEXT   PRIMARY KEY DEFAULT 'default',
+    default_status_id      BIGINT NOT NULL REFERENCES helpdesk.ticket_status(id),
+    default_department_id  BIGINT NOT NULL REFERENCES helpdesk.department(id),
+    default_assigned_to_id BIGINT NOT NULL REFERENCES helpdesk.profile(id),
+    assigned_status_id     BIGINT NOT NULL REFERENCES helpdesk.ticket_status(id),
+    system_profile_id      BIGINT NOT NULL REFERENCES helpdesk.profile(id)
 );
 
 CREATE TABLE helpdesk.ticket (

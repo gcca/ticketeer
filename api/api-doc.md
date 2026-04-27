@@ -981,6 +981,64 @@ TOKEN="$(http -b POST http://localhost:5521/ticketeer/api/auth/v1/signin usernam
 http POST http://localhost:5521/ticketeer/api/role/requester/v1/ticket/1/activity/create/message Authorization:"Bearer $TOKEN" message="Test message"
 ```
 
+## Supervisor Role Endpoints
+
+The supervisor role currently exposes endpoints equivalent to the requester
+role endpoints. They require a valid Ticketeer token and a local profile with
+role `supervisor`.
+
+The request and response contracts are the same as the corresponding
+`/role/requester/...` endpoints documented above. Replace the path prefix:
+
+```text
+/ticketeer/api/role/requester
+```
+
+with:
+
+```text
+/ticketeer/api/role/supervisor
+```
+
+Available endpoints:
+
+| Method | Path | Equivalent requester endpoint |
+| --- | --- | --- |
+| `GET` | `/ticketeer/api/role/supervisor/v1/ticket/list` | `GET /ticketeer/api/role/requester/v1/ticket/list` |
+| `POST` | `/ticketeer/api/role/supervisor/v1/ticket/create` | `POST /ticketeer/api/role/requester/v1/ticket/create` |
+| `GET` | `/ticketeer/api/role/supervisor/v1/ticket/{ticket_id}/details` | `GET /ticketeer/api/role/requester/v1/ticket/{ticket_id}/details` |
+| `GET` | `/ticketeer/api/role/supervisor/v1/ticket/{ticket_id}/activity/list` | `GET /ticketeer/api/role/requester/v1/ticket/{ticket_id}/activity/list` |
+| `POST` | `/ticketeer/api/role/supervisor/v1/ticket/{ticket_id}/activity/create/message` | `POST /ticketeer/api/role/requester/v1/ticket/{ticket_id}/activity/create/message` |
+
+### Authorization
+
+```http
+Authorization: Bearer ticketeer-v1_<token>
+```
+
+The token must be valid and the authenticated user must have role
+`supervisor`.
+
+Common authorization errors:
+
+| Code | Body | Cause |
+| --- | --- | --- |
+| `400` | `{"message":"Missing Authorization"}` | Missing `Authorization` header or does not start with `Bearer ` |
+| `401` | `{"message":"Invalid or expired token"}` | The token does not exist or has expired |
+| `403` | `{"message":"Forbidden: insufficient permissions"}` | The user does not have role `supervisor` |
+
+### Examples
+
+```sh
+TOKEN="$(http -b POST http://localhost:5521/ticketeer/api/auth/v1/signin username=supervisor01 password=t801 | jq -r '.token')"
+
+http GET http://localhost:5521/ticketeer/api/role/supervisor/v1/ticket/list Authorization:"Bearer $TOKEN"
+
+http GET http://localhost:5521/ticketeer/api/role/supervisor/v1/ticket/1/details Authorization:"Bearer $TOKEN"
+
+http POST http://localhost:5521/ticketeer/api/role/supervisor/v1/ticket/1/activity/create/message Authorization:"Bearer $TOKEN" message="Supervisor follow-up"
+```
+
 ## Test Data
 
 `fixtures/sample-data.sql` creates local users with password `t801`. Some available users:

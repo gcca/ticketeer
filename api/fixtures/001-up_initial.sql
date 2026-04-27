@@ -31,7 +31,7 @@ INSERT INTO helpdesk.profile (user_id, department_id, role) VALUES
     );
 
 INSERT INTO helpdesk.setting
-    (default_status_id, assigned_status_id, default_department_id, system_user_id)
+    (default_status_id, assigned_status_id, default_department_id, system_profile_id)
 VALUES (
     (SELECT id FROM helpdesk.ticket_status WHERE name = 'unassigned'),
     (SELECT id FROM helpdesk.ticket_status WHERE name = 'assigned'),
