@@ -39,5 +39,6 @@ int main(int argc, char *argv[]) {
   const auto port = options.port;
   LOGJ_INFO(logger, "ticketeer-api: listening", bind, port);
 
+  drogon::app().setClientMaxBodySize(6L * 1024 * 1024);
   drogon::app().addListener(options.bind, options.port).run();
 }

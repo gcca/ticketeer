@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -199,10 +200,12 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
       setFormOpen(false)
       setFormState({ status: 'idle' })
       loadTickets(search || undefined)
+      toast.success('Ticket creado.')
     } catch (err) {
       if ((err as { status?: number }).status === 401) { onSignout(); return }
       const message = err instanceof Error ? err.message : 'Error al crear el ticket.'
       setFormState({ status: 'error', message })
+      toast.error(message)
     }
   }
 
@@ -220,10 +223,12 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
       })
       setMessageOpen(false)
       setMessageState({ status: 'idle' })
+      toast.success('Mensaje enviado.')
     } catch (err) {
       if ((err as { status?: number }).status === 401) { onSignout(); return }
-      const message = err instanceof Error ? err.message : 'Error al enviar el mensaje.'
-      setMessageState({ status: 'error', message })
+      const msg = err instanceof Error ? err.message : 'Error al enviar el mensaje.'
+      setMessageState({ status: 'error', message: msg })
+      toast.error(msg)
     }
   }
 
@@ -235,8 +240,19 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
       setUploadingActivityId(null)
       return
     }
+    const upload = api.uploadAttachment(token, detailState.detail.id, activityId, file)
+    toast.promise(upload, {
+      loading: `Subiendo "${file.name}"…`,
+      success: att => `Archivo "${att.file_name}" adjuntado.`,
+      error: err => {
+        const status = (err as { status?: number }).status
+        return status === 413
+          ? 'El archivo supera el límite de 5 MB.'
+          : (err instanceof Error ? err.message : 'Error al subir el archivo.')
+      },
+    })
     try {
-      const att = await api.uploadAttachment(token, detailState.detail.id, activityId, file)
+      const att = await upload
       setDetailState({
         status: 'ready',
         detail: {
@@ -251,7 +267,11 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
       setUploadError(null)
     } catch (err) {
       if ((err as { status?: number }).status === 401) { onSignout(); return }
-      setUploadError(err instanceof Error ? err.message : 'Error al subir el archivo.')
+      const status = (err as { status?: number }).status
+      const msg = status === 413
+        ? 'El archivo supera el límite de 5 MB.'
+        : (err instanceof Error ? err.message : 'Error al subir el archivo.')
+      setUploadError(msg)
     } finally {
       setUploadingActivityId(null)
     }
