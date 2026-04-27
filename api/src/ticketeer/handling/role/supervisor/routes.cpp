@@ -70,11 +70,9 @@ SELECT p.id::text
   return user_id;
 }
 
-[[nodiscard]] inline Json::Value
-FetchTicketList(quill::Logger *logger, PGconn *pg,
-                const std::string &profile_id) {
+[[nodiscard]] inline Json::Value FetchTicketList(quill::Logger *logger,
+                                                 PGconn *pg) {
   Json::Value result = Json::arrayValue;
-  const char *params[] = {profile_id.c_str()};
   PGresult *tickets = PQexecParams(pg,
                                    R"SQL(
 SELECT t.id::text,
@@ -82,10 +80,9 @@ SELECT t.id::text,
        t.status_id::text,
        t.created_at::text
   FROM helpdesk.ticket t
- WHERE t.requester_id = $1::bigint
  ORDER BY t.created_at DESC
 )SQL",
-                                   1, nullptr, params, nullptr, nullptr, 0);
+                                   0, nullptr, nullptr, nullptr, nullptr, 0);
 
   if (PQresultStatus(tickets) != PGRES_TUPLES_OK) {
     LOGJ_DEBUG(logger, "[supervisor] ticket list query error",
@@ -163,11 +160,33 @@ SELECT default_status_id::text
   return default_status_id;
 }
 
+[[nodiscard]] inline std::optional<std::string>
+FetchDefaultAssignedToId(quill::Logger *logger, PGconn *pg) {
+  PGresult *res = PQexecParams(pg,
+                               R"SQL(
+SELECT default_assigned_to_id::text
+  FROM helpdesk.setting
+ WHERE name = 'default'
+)SQL",
+                               0, nullptr, nullptr, nullptr, nullptr, 0);
+  if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) != 1) {
+    LOGJ_DEBUG(logger, "[supervisor] default assigned to query error",
+               PQresultErrorMessage(res));
+    PQclear(res);
+    return std::nullopt;
+  }
+
+  std::string default_assigned_to_id = PQgetvalue(res, 0, 0);
+  PQclear(res);
+  return default_assigned_to_id;
+}
+
 [[nodiscard]] inline std::optional<Json::Value>
 CreateTicket(quill::Logger *logger, PGconn *pg, const std::string &profile_id,
              const Json::Value &request_type_id,
              const Json::Value &department_id, const Json::Value &priority_id,
              const std::string &default_status_id,
+             const std::string &default_assigned_to_id,
              const Json::Value &description, const Json::Value &due_date) {
   std::string request_type_str = request_type_id.asString();
   std::string department_str = department_id.asString();
@@ -178,18 +197,19 @@ CreateTicket(quill::Logger *logger, PGconn *pg, const std::string &profile_id,
   std::vector<const char *> params = {
       request_type_str.c_str(),  profile_id.c_str(),
       department_str.c_str(),    priority_str.c_str(),
-      default_status_id.c_str(), description_str.c_str()};
+      default_status_id.c_str(), default_assigned_to_id.c_str(),
+      description_str.c_str()};
   std::string query =
       "INSERT INTO helpdesk.ticket (request_type_id, requester_id, "
-      "department_id, priority_id, status_id, description";
+      "department_id, priority_id, status_id, assigned_to_id, description";
   if (!due_date_str.empty()) {
     query += ", due_date";
     params.push_back(due_date_str.c_str());
   }
   query += ") VALUES ($1::bigint, $2::bigint, $3::bigint, $4::bigint, "
-           "$5::bigint, $6";
+           "$5::bigint, $6::bigint, $7";
   if (!due_date_str.empty()) {
-    query += ", $7";
+    query += ", $8";
   }
   query += ") RETURNING id::text, description, created_at::text";
 
@@ -433,7 +453,7 @@ void Supervisor::TicketList(
                       drogon::k403Forbidden);
   }
 
-  Json::Value tickets = FetchTicketList(logger, pg, *profile_id);
+  Json::Value tickets = FetchTicketList(logger, pg);
   AppendActivityPreviews(logger, pg, tickets);
   PQfinish(pg);
 
@@ -486,9 +506,15 @@ void Supervisor::TicketCreate(
     return BadRequest(callback, "Failed to get default status");
   }
 
-  auto ticket =
-      CreateTicket(logger, pg, *profile_id, request_type_id, department_id,
-                   priority_id, *default_status_id, description, due_date);
+  auto default_assigned_to_id = FetchDefaultAssignedToId(logger, pg);
+  if (!default_assigned_to_id) {
+    PQfinish(pg);
+    return BadRequest(callback, "Failed to get default assigned to");
+  }
+
+  auto ticket = CreateTicket(logger, pg, *profile_id, request_type_id,
+                             department_id, priority_id, *default_status_id,
+                             *default_assigned_to_id, description, due_date);
   if (!ticket) {
     PQfinish(pg);
     return BadRequest(callback, "Failed to create ticket");

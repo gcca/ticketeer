@@ -983,9 +983,9 @@ http POST http://localhost:5521/ticketeer/api/role/requester/v1/ticket/1/activit
 
 ## Supervisor Role Endpoints
 
-The supervisor role currently exposes endpoints equivalent to the requester
-role endpoints. They require a valid Ticketeer token and a local profile with
-role `supervisor`.
+The supervisor role currently exposes endpoints mostly equivalent to the
+requester role endpoints. They require a valid Ticketeer token and a local
+profile with role `supervisor`.
 
 The request and response contracts are the same as the corresponding
 `/role/requester/...` endpoints documented above. Replace the path prefix:
@@ -999,6 +999,10 @@ with:
 ```text
 /ticketeer/api/role/supervisor
 ```
+
+Exception: `GET /ticketeer/api/role/supervisor/v1/ticket/list` returns all
+tickets ordered by creation date descending. The requester equivalent only
+returns tickets created by the authenticated requester.
 
 Available endpoints:
 

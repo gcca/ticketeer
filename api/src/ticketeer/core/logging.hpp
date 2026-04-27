@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -72,7 +73,9 @@ class TicketeerJsonConsoleSink : public quill::JsonConsoleSink {
     AppendJsonString("timestamp");
     _json_message.push_back(':');
     AppendJsonString(std::to_string(log_timestamp));
-    AppendJsonField("file_name", log_metadata->file_name());
+    AppendJsonField(
+        "file_name",
+        std::filesystem::absolute(log_metadata->file_name()).string());
     AppendJsonField("line", log_metadata->line());
     AppendJsonField("thread_id", thread_id);
     AppendJsonField("logger", logger_name);
