@@ -17,6 +17,7 @@ add_executable(
   src/ticketeer/handling/auth/middlewares.cpp
   src/ticketeer/handling/auth/routes.cpp
   src/ticketeer/handling/dashboard/routes.cpp
+  src/ticketeer/handling/role/common.cpp
   src/ticketeer/handling/role/requester/middlewares.cpp
   src/ticketeer/handling/role/requester/routes.cpp
   src/ticketeer/handling/role/supervisor/middlewares.cpp

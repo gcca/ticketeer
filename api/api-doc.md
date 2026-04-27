@@ -561,7 +561,7 @@ Full URL:
 ### Request
 
 ```http
-GET /ticketeer/api/role/requester/v1/ticket/list
+GET /ticketeer/api/role/requester/v1/ticket/list?s=laptop
 Authorization: Bearer ticketeer-v1_<token>
 ```
 
@@ -570,6 +570,7 @@ Contract:
 | Field | Location | Type | Required | Description |
 | --- | --- | --- | --- | --- |
 | `Authorization` | Header | string | Yes | Must have format `Bearer <token>`. The user must have role `requester`. |
+| `s` | Query | string | No | Search text. Currently filters tickets whose description or activity body contains this value. |
 
 ### Response `200`
 
@@ -590,7 +591,9 @@ Contract:
 ]
 ```
 
-Note: the example shows an abbreviated array. The real response includes all user tickets ordered by creation date descending. `activities` is ordered by `created_at` descending.
+Note: the example shows an abbreviated array. The real response includes at
+most 57 user tickets ordered by creation date descending. `activities` is
+ordered by `created_at` descending.
 
 Contract for each ticket:
 
@@ -1000,9 +1003,11 @@ with:
 /ticketeer/api/role/supervisor
 ```
 
-Exception: `GET /ticketeer/api/role/supervisor/v1/ticket/list` returns all
-tickets ordered by creation date descending. The requester equivalent only
-returns tickets created by the authenticated requester.
+Exception: `GET /ticketeer/api/role/supervisor/v1/ticket/list` returns at most
+57 tickets ordered by creation date descending. The requester equivalent only
+returns tickets created by the authenticated requester. Both list endpoints
+accept the optional query parameter `s`, which currently filters tickets whose
+description or activity body contains the given value.
 
 Available endpoints:
 

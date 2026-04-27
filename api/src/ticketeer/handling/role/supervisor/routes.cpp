@@ -11,6 +11,7 @@
 #include <quill/LogMacros.h>
 
 #include "ticketeer/core/conf.hpp"
+#include "ticketeer/handling/role/common.hpp"
 
 namespace {
 
@@ -68,74 +69,6 @@ SELECT p.id::text
   std::string user_id = PQgetvalue(res, 0, 0);
   PQclear(res);
   return user_id;
-}
-
-[[nodiscard]] inline Json::Value FetchTicketList(quill::Logger *logger,
-                                                 PGconn *pg) {
-  Json::Value result = Json::arrayValue;
-  PGresult *tickets = PQexecParams(pg,
-                                   R"SQL(
-SELECT t.id::text,
-       t.description,
-       t.status_id::text,
-       t.created_at::text
-  FROM helpdesk.ticket t
- ORDER BY t.created_at DESC
-)SQL",
-                                   0, nullptr, nullptr, nullptr, nullptr, 0);
-
-  if (PQresultStatus(tickets) != PGRES_TUPLES_OK) {
-    LOGJ_DEBUG(logger, "[supervisor] ticket list query error",
-               PQresultErrorMessage(tickets));
-    PQclear(tickets);
-    return result;
-  }
-
-  for (int i = 0; i < PQntuples(tickets); ++i) {
-    Json::Value ticket;
-    ticket["id"] = PQgetvalue(tickets, i, 0);
-    ticket["description"] = PQgetvalue(tickets, i, 1);
-    ticket["status_id"] = PQgetvalue(tickets, i, 2);
-    ticket["created_at"] = PQgetvalue(tickets, i, 3);
-    ticket["activities"] = Json::arrayValue;
-    result.append(ticket);
-  }
-  PQclear(tickets);
-
-  return result;
-}
-
-inline void AppendActivityPreviews(quill::Logger *logger, PGconn *pg,
-                                   Json::Value &tickets) {
-  for (Json::ArrayIndex i = 0; i < tickets.size(); ++i) {
-    std::string ticket_id = tickets[i]["id"].asString();
-    const char *params[] = {ticket_id.c_str()};
-    PGresult *activities =
-        PQexecParams(pg,
-                     R"SQL(
-SELECT body,
-       created_at::text
-  FROM helpdesk.ticket_activity
- WHERE ticket_id = $1::bigint
- ORDER BY created_at DESC
-)SQL",
-                     1, nullptr, params, nullptr, nullptr, 0);
-
-    if (PQresultStatus(activities) != PGRES_TUPLES_OK) {
-      LOGJ_DEBUG(logger, "[supervisor] ticket activity preview query error",
-                 PQresultErrorMessage(activities));
-      PQclear(activities);
-      continue;
-    }
-
-    for (int j = 0; j < PQntuples(activities); ++j) {
-      Json::Value activity;
-      activity["body"] = PQgetvalue(activities, j, 0);
-      activity["created_at"] = PQgetvalue(activities, j, 1);
-      tickets[i]["activities"].append(activity);
-    }
-    PQclear(activities);
-  }
 }
 
 [[nodiscard]] inline std::optional<std::string>
@@ -449,8 +382,10 @@ void Supervisor::TicketList(
                       drogon::k403Forbidden);
   }
 
-  Json::Value tickets = FetchTicketList(logger, pg);
-  AppendActivityPreviews(logger, pg, tickets);
+  const std::string search = req->getParameter("s");
+  Json::Value tickets = ticketeer::api::role::common::FetchSupervisorTicketList(
+      logger, pg,
+      search.empty() ? std::nullopt : std::optional<std::string>{search});
   PQfinish(pg);
 
   callback(drogon::HttpResponse::newHttpJsonResponse(tickets));

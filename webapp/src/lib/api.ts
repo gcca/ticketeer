@@ -191,8 +191,10 @@ export async function ActivityCreateMessage(
   return res.json() as Promise<TicketActivityDetail>
 }
 
-export async function TicketList(token: string): Promise<Ticket[]> {
-  const res = await fetch(`${REQUESTER}/ticket/list`, {
+export async function TicketList(token: string, search?: string): Promise<Ticket[]> {
+  const url = new URL(`${REQUESTER}/ticket/list`, window.location.origin)
+  if (search) url.searchParams.set('s', search)
+  const res = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) {
@@ -205,8 +207,10 @@ export async function TicketList(token: string): Promise<Ticket[]> {
   return res.json() as Promise<Ticket[]>
 }
 
-export async function SupervisorTicketList(token: string): Promise<Ticket[]> {
-  const res = await fetch(`${SUPERVISOR}/ticket/list`, {
+export async function SupervisorTicketList(token: string, search?: string): Promise<Ticket[]> {
+  const url = new URL(`${SUPERVISOR}/ticket/list`, window.location.origin)
+  if (search) url.searchParams.set('s', search)
+  const res = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) {

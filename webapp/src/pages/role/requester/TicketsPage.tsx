@@ -19,7 +19,7 @@ import {
 } from '@/lib/api'
 
 export type TicketsPageApi = {
-  listTickets: (token: string) => Promise<Ticket[]>
+  listTickets: (token: string, search?: string) => Promise<Ticket[]>
   createTicket: (token: string, input: CreateTicketInput) => Promise<CreatedTicket>
   getDetails: (token: string, id: string) => Promise<TicketDetail>
   createMessage: (token: string, ticketId: string, message: string) => Promise<TicketActivityDetail>
@@ -97,6 +97,8 @@ function DetailField({ label, value }: { label: string; value: string }) {
   )
 }
 
+const DEFAULT_PAGE_SIZE = 12
+
 export function TicketsPage({ token, onSignout, requestTypes, departments, priorities, ticketStatuses, api = defaultApi }: Props) {
   const [listState, setListState] = useState<ListState>({ status: 'loading' })
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -108,10 +110,15 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
   const [messageOpen, setMessageOpen] = useState(false)
   const [messageState, setMessageState] = useState<MessageState>({ status: 'idle' })
   const messageRef = useRef<HTMLTextAreaElement>(null)
+  const [search, setSearch] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function loadTickets() {
+  function loadTickets(s?: string) {
     setListState({ status: 'loading' })
-    api.listTickets(token)
+    api.listTickets(token, s)
       .then(tickets => setListState({ status: 'ready', tickets }))
       .catch(err => {
         if ((err as { status?: number }).status === 401) { onSignout(); return }
@@ -120,7 +127,25 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
       })
   }
 
-  useEffect(loadTickets, [token, onSignout])
+  useEffect(() => { loadTickets(search || undefined) }, [token, onSignout, search])
+
+  function handleSearchChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value
+    setSearchInput(val)
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => {
+      setSearch(val)
+      setPage(1)
+    }, 400)
+  }
+
+  function handlePageSizeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const n = parseInt(e.target.value, 10)
+    if (!isNaN(n) && n > 0) {
+      setPageSize(n)
+      setPage(1)
+    }
+  }
 
   function handleRowClick(id: string) {
     setExpandedId(prev => prev === id ? null : id)
@@ -167,7 +192,7 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
       await api.createTicket(token, { request_type_id, department_id, priority_id, description, due_date })
       setFormOpen(false)
       setFormState({ status: 'idle' })
-      loadTickets()
+      loadTickets(search || undefined)
     } catch (err) {
       if ((err as { status?: number }).status === 401) { onSignout(); return }
       const message = err instanceof Error ? err.message : 'Error al crear el ticket.'
@@ -307,16 +332,21 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
   }
 
   // ── List view ─────────────────────────────────────────────────────────────────
+  const allTickets = listState.status === 'ready' ? listState.tickets : []
+  const totalPages = Math.max(1, Math.ceil(allTickets.length / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const pageTickets = allTickets.slice((safePage - 1) * pageSize, safePage * pageSize)
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Tickets</h2>
           {listState.status === 'ready' && (
             <p className="text-sm text-muted-foreground mt-1">
-              {listState.tickets.length === 0
-                ? 'No tienes tickets registrados.'
-                : `${listState.tickets.length} ticket${listState.tickets.length === 1 ? '' : 's'} encontrado${listState.tickets.length === 1 ? '' : 's'}.`}
+              {allTickets.length === 0
+                ? (search ? 'Sin resultados para la búsqueda.' : 'No hay tickets registrados.')
+                : `${allTickets.length} ticket${allTickets.length === 1 ? '' : 's'} · página ${safePage} de ${totalPages}`}
             </p>
           )}
         </div>
@@ -329,6 +359,31 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
             Nuevo ticket
           </Button>
         )}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground">
+            <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+          </svg>
+          <Input
+            type="search"
+            placeholder="Buscar tickets…"
+            value={searchInput}
+            onChange={handleSearchChange}
+            className="pl-8 h-8 text-sm"
+          />
+        </div>
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground shrink-0">
+          <span>Por página</span>
+          <input
+            type="number"
+            min={1}
+            value={pageSize}
+            onChange={handlePageSizeChange}
+            className="w-14 h-8 rounded-md border border-input bg-transparent px-2 text-sm text-center outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          />
+        </div>
       </div>
 
       {formOpen && (
@@ -399,7 +454,7 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
         </div>
       )}
 
-      {listState.status === 'ready' && listState.tickets.length > 0 && (
+      {listState.status === 'ready' && allTickets.length > 0 && (
         <div className="rounded-md border bg-background overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -409,9 +464,9 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
               </tr>
             </thead>
             <tbody>
-              {listState.tickets.map((ticket, i) => {
+              {pageTickets.map((ticket, i) => {
                 const isExpanded = expandedId === ticket.id
-                const isLast = i === listState.tickets.length - 1
+                const isLast = i === pageTickets.length - 1
                 const statusName = ticketStatuses.find(s => s.id === ticket.status_id)?.display_name ?? ticket.status_id
                 return (
                   <Fragment key={ticket.id}>
@@ -491,6 +546,48 @@ export function TicketsPage({ token, onSignout, requestTypes, departments, prior
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {listState.status === 'ready' && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-1">
+          <button
+            type="button"
+            onClick={() => setPage(1)}
+            disabled={safePage === 1}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            aria-label="Primera página"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={safePage === 1}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            aria-label="Página anterior"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <span className="px-3 text-sm text-muted-foreground">{safePage} / {totalPages}</span>
+          <button
+            type="button"
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={safePage === totalPages}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            aria-label="Página siguiente"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPage(totalPages)}
+            disabled={safePage === totalPages}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-md text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-40 disabled:pointer-events-none transition-colors"
+            aria-label="Última página"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></svg>
+          </button>
         </div>
       )}
     </div>
