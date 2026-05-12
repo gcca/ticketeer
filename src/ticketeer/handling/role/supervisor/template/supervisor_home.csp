@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="es" data-theme="abyss">
+  <head>
+    <script>(function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ticketeer | Supervisor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet" />
+    <style>body { font-family: 'JetBrains Mono', monospace; font-weight: 300; }</style>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js" integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V" crossorigin="anonymous"></script>
+    <script>
+      function setTheme(name) {
+        document.documentElement.setAttribute('data-theme', name);
+        localStorage.setItem('theme', name);
+        document.querySelectorAll('[data-theme-btn]').forEach(function(btn) {
+          btn.querySelector('svg').classList.toggle('invisible', btn.dataset.themeBtn !== name);
+        });
+      }
+      function ticketeerSelectAssignedTo(btn, value) {
+        const form = btn.closest('form');
+        const input = form.querySelector('input[name="new_assigned_to"]');
+        input.value = value;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        btn.blur();
+      }
+      document.addEventListener('DOMContentLoaded', function () {
+        const saved = localStorage.getItem('theme');
+        if (saved) setTheme(saved);
+        const params = new URLSearchParams(window.location.search);
+        const modules = {
+          tickets: '/ticketeer/supervisor/ticket/list',
+          'config-ticket-status': '/ticketeer/supervisor/config/ticket-status/list',
+          'config-ticket-priority': '/ticketeer/supervisor/config/ticket-priority/list',
+          'config-settings': '/ticketeer/supervisor/config/settings'
+        };
+        const ticketFilterKeys = ['s', 'requester_id', 'status_id', 'priority_id', 'assigned_to_id', 'sort', 'dir'];
+        const requestedModule = params.get('t') || 'tickets';
+        const currentModule = modules[requestedModule] ? requestedModule : 'tickets';
+        document.querySelectorAll('[data-module-link]').forEach(function(link) {
+          link.classList.toggle('active', link.dataset.moduleLink === currentModule);
+        });
+        const ticketId = currentModule === 'tickets' ? params.get('i') : null;
+        if (ticketId) {
+          htmx.ajax('GET', '/ticketeer/supervisor/ticket/' + ticketId + '/details', {
+            target: '#main-content',
+            swap: 'innerHTML'
+          });
+        } else {
+          const moduleParams = new URLSearchParams();
+          if (currentModule === 'tickets') {
+            ticketFilterKeys.forEach(function(key) {
+              const value = params.get(key);
+              if (value) moduleParams.set(key, value);
+            });
+            if (params.get('p')) moduleParams.set('p', params.get('p'));
+          }
+          if (currentModule === 'config-ticket-status' && params.get('ts')) moduleParams.set('ts', params.get('ts'));
+          if (currentModule === 'config-ticket-priority' && params.get('tp')) moduleParams.set('tp', params.get('tp'));
+          const query = moduleParams.toString();
+          const moduleUrl = modules[currentModule] + (query ? '?' + query : '');
+          htmx.ajax('GET', moduleUrl, {
+            target: '#main-content',
+            swap: 'innerHTML'
+          });
+        }
+        document.body.addEventListener('pointerdown', function (evt) {
+          const el = evt.target.closest('[hx-push-url]');
+          if (!el) return;
+          const currentParams = new URLSearchParams(window.location.search);
+          const pu = el.getAttribute('hx-push-url') || '';
+          const pp = new URLSearchParams(pu.replace(/^\?/, ''));
+          const targetModule = pp.get('t') || new URLSearchParams(window.location.search).get('t') || 'tickets';
+          if (targetModule === 'tickets' || pp.has('i')) {
+            ticketFilterKeys.forEach(function(key) {
+              const value = currentParams.get(key);
+              if (!pp.has(key)) {
+                value ? pp.set(key, value) : pp.delete(key);
+              }
+            });
+            if (!pp.has('p')) {
+              const page = currentParams.get('p');
+              page ? pp.set('p', page) : pp.delete('p');
+            }
+          } else {
+            ticketFilterKeys.forEach(function(key) { pp.delete(key); });
+            pp.delete('p');
+          }
+          if (targetModule !== 'config-ticket-status') pp.delete('ts');
+          if (targetModule !== 'config-ticket-priority') pp.delete('tp');
+          el.setAttribute('hx-push-url', '?' + pp.toString());
+          const hxGet = el.getAttribute('hx-get') || '';
+          const parts = hxGet.split('?');
+          const base = parts[0];
+          if (base.endsWith('/ticket/list')) {
+            const qp = new URLSearchParams(parts[1] || '');
+            ticketFilterKeys.forEach(function(key) {
+              const value = currentParams.get(key);
+              if (!qp.has(key)) {
+                value ? qp.set(key, value) : qp.delete(key);
+              }
+            });
+            if (!qp.has('p')) {
+              const page = currentParams.get('p');
+              page ? qp.set('p', page) : qp.delete('p');
+            }
+            const query = qp.toString();
+            el.setAttribute('hx-get', query ? base + '?' + query : base);
+          }
+        });
+        document.body.addEventListener('click', function (evt) {
+          const link = evt.target.closest('[data-module-link]');
+          if (!link) return;
+          document.querySelectorAll('[data-module-link]').forEach(function(item) {
+            item.classList.toggle('active', item === link);
+          });
+        });
+      });
+    </script>
+  </head>
+  <body class="min-h-screen bg-base-200">
+    <div class="drawer lg:drawer-open">
+      <input id="sidebar-drawer" type="checkbox" class="drawer-toggle" />
+      <div class="drawer-content flex flex-col">
+        <div class="navbar bg-base-100 shadow-md lg:hidden">
+          <div class="flex-none">
+            <label for="sidebar-drawer" class="btn btn-square btn-ghost">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block h-6 w-6 stroke-current">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+              </svg>
+            </label>
+          </div>
+          <div class="flex-1">
+            <span class="text-xl font-bold">Ticketeer</span>
+          </div>
+        </div>
+        <main class="flex-1 p-6">
+          <div id="main-content" class="mx-auto max-w-7xl">
+            <span class="loading loading-spinner loading-md"></span>
+          </div>
+        </main>
+      </div>
+      <div class="drawer-side z-10">
+        <label for="sidebar-drawer" class="drawer-overlay"></label>
+        <aside class="flex h-full w-64 flex-col bg-base-100">
+          <div class="flex h-16 items-center gap-2 border-b border-base-300 px-6">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-content font-bold">T</div>
+            <span class="text-xl font-bold">Ticketeer</span>
+          </div>
+          <nav class="flex-1 overflow-y-auto p-4">
+            <ul class="menu gap-1">
+              <li>
+                <a class="active"
+                   data-module-link="tickets"
+                   hx-get="/ticketeer/supervisor/ticket/list"
+                   hx-target="#main-content"
+                   hx-swap="innerHTML"
+                   hx-push-url="?t=tickets">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
+                  </svg>
+                  Tickets
+                </a>
+              </li>
+              <li>
+                <a data-module-link="config-ticket-status"
+                   hx-get="/ticketeer/supervisor/config/ticket-status/list"
+                   hx-target="#main-content"
+                   hx-swap="innerHTML"
+                   hx-push-url="?t=config-ticket-status">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                  </svg>
+                  Estado
+                </a>
+              </li>
+              <li>
+                <a data-module-link="config-ticket-priority"
+                   hx-get="/ticketeer/supervisor/config/ticket-priority/list"
+                   hx-target="#main-content"
+                   hx-swap="innerHTML"
+                   hx-push-url="?t=config-ticket-priority">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" />
+                  </svg>
+                  Prioridad
+                </a>
+              </li>
+
+              <div class="divider my-2"></div>
+
+              <li>
+                <a data-module-link="config-settings"
+                   hx-get="/ticketeer/supervisor/config/settings"
+                   hx-target="#main-content"
+                   hx-swap="innerHTML"
+                   hx-push-url="?t=config-settings">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                  </svg>
+                  Configuración
+                </a>
+              </li>
+            </ul>
+          </nav>
+          <div class="border-t border-base-300 p-4">
+<%c++
+  auto& _name = std::any_cast<std::string&>(@@["name"]);
+  auto& _username = std::any_cast<std::string&>(@@["username"]);
+  auto& o = supervisor_home_tmp_stream;
+%>
+            <div class="dropdown dropdown-top w-full">
+              <div tabindex="0" role="button" class="flex items-center gap-3 cursor-pointer rounded-lg p-1 hover:bg-base-200 transition-colors">
+                <div class="avatar placeholder">
+                  <div class="flex items-center justify-center w-10 rounded-full bg-primary text-primary-content">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                    </svg>
+                  </div>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-semibold truncate"><%c++ o << drogon::HttpViewData::htmlTranslate(_name); %></div>
+                  <div class="text-xs opacity-60 truncate"><%c++ o << drogon::HttpViewData::htmlTranslate(_username); %></div>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4 opacity-50">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+                </svg>
+              </div>
+              <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-50 w-56 p-2 shadow-lg border border-base-300 mb-2">
+                <li>
+                  <details>
+                    <summary>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.098 19.902a3.75 3.75 0 005.304 0l6.401-6.402M6.75 21A3.75 3.75 0 013 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.072M6.75 21a3.75 3.75 0 003.75-3.75V8.197M6.75 21h13.125c.621 0 1.125-.504 1.125-1.125v-5.25c0-.621-.504-1.125-1.125-1.125h-4.072M10.5 8.197l2.88-2.88c.438-.439 1.15-.439 1.59 0l3.712 3.713c.44.44.44 1.152 0 1.59l-2.879 2.88M6.75 17.25h.008v.008H6.75v-.008z" />
+                      </svg>
+                      Tema
+                    </summary>
+                    <ul class="max-h-48 overflow-y-auto">
+                      <li><button class="gap-3 px-2" data-theme-btn="light" onclick="setTheme('light')"><div data-theme="light" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Light</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="dark" onclick="setTheme('dark')"><div data-theme="dark" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Dark</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="cupcake" onclick="setTheme('cupcake')"><div data-theme="cupcake" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Cupcake</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="bumblebee" onclick="setTheme('bumblebee')"><div data-theme="bumblebee" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Bumblebee</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="emerald" onclick="setTheme('emerald')"><div data-theme="emerald" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Emerald</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="corporate" onclick="setTheme('corporate')"><div data-theme="corporate" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Corporate</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="synthwave" onclick="setTheme('synthwave')"><div data-theme="synthwave" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Synthwave</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="retro" onclick="setTheme('retro')"><div data-theme="retro" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Retro</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="cyberpunk" onclick="setTheme('cyberpunk')"><div data-theme="cyberpunk" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Cyberpunk</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="valentine" onclick="setTheme('valentine')"><div data-theme="valentine" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Valentine</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="halloween" onclick="setTheme('halloween')"><div data-theme="halloween" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Halloween</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="garden" onclick="setTheme('garden')"><div data-theme="garden" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Garden</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="forest" onclick="setTheme('forest')"><div data-theme="forest" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Forest</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="aqua" onclick="setTheme('aqua')"><div data-theme="aqua" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Aqua</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="lofi" onclick="setTheme('lofi')"><div data-theme="lofi" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Lo-Fi</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="pastel" onclick="setTheme('pastel')"><div data-theme="pastel" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Pastel</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="fantasy" onclick="setTheme('fantasy')"><div data-theme="fantasy" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Fantasy</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="wireframe" onclick="setTheme('wireframe')"><div data-theme="wireframe" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Wireframe</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="black" onclick="setTheme('black')"><div data-theme="black" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Black</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="luxury" onclick="setTheme('luxury')"><div data-theme="luxury" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Luxury</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="dracula" onclick="setTheme('dracula')"><div data-theme="dracula" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Dracula</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="cmyk" onclick="setTheme('cmyk')"><div data-theme="cmyk" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">CMYK</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="autumn" onclick="setTheme('autumn')"><div data-theme="autumn" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Autumn</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="business" onclick="setTheme('business')"><div data-theme="business" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Business</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="acid" onclick="setTheme('acid')"><div data-theme="acid" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Acid</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="lemonade" onclick="setTheme('lemonade')"><div data-theme="lemonade" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Lemonade</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="night" onclick="setTheme('night')"><div data-theme="night" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Night</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="coffee" onclick="setTheme('coffee')"><div data-theme="coffee" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Coffee</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="winter" onclick="setTheme('winter')"><div data-theme="winter" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Winter</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="dim" onclick="setTheme('dim')"><div data-theme="dim" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Dim</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="nord" onclick="setTheme('nord')"><div data-theme="nord" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Nord</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="sunset" onclick="setTheme('sunset')"><div data-theme="sunset" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Sunset</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="caramellatte" onclick="setTheme('caramellatte')"><div data-theme="caramellatte" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Caramellatte</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="abyss" onclick="setTheme('abyss')"><div data-theme="abyss" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Abyss</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                      <li><button class="gap-3 px-2" data-theme-btn="silk" onclick="setTheme('silk')"><div data-theme="silk" class="bg-base-100 grid shrink-0 grid-cols-2 gap-0.5 rounded p-1 shadow-sm"><div class="bg-base-content size-1 rounded-full"></div><div class="bg-primary size-1 rounded-full"></div><div class="bg-secondary size-1 rounded-full"></div><div class="bg-accent size-1 rounded-full"></div></div><span class="flex-1 text-left">Silk</span><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="invisible h-3 w-3 shrink-0"><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg></button></li>
+                    </ul>
+                  </details>
+                </li>
+                <li>
+                  <button type="submit" form="signout-form" class="text-error">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                    </svg>
+                    Cerrar sesión
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <form id="signout-form" method="post" action="/ticketeer/auth/signout" class="hidden"></form>
+  </body>
+</html>

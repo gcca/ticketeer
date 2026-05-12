@@ -1,0 +1,5 @@
+Checks: '-*,bugprone-*'
+WarningsAsErrors: false
+HeaderFilterRegex: '.*/src/.*'
+SystemHeaders: false
+FormatStyle: 'file'

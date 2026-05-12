@@ -1,0 +1,144 @@
+<%c++
+  auto& o = app_signin_tmp_stream;
+  auto& user_code = std::any_cast<std::string&>(@@["user_code"]);
+  auto& device_code = std::any_cast<std::string&>(@@["device_code"]);
+  auto& verification_uri = std::any_cast<std::string&>(@@["verification_uri"]);
+%>
+<!doctype html>
+<html lang="es" data-theme="dim">
+  <head>
+    <script>(function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ticketeer | Office 365</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet" />
+    <style>body { font-family: 'JetBrains Mono', monospace; font-weight: 300; }</style>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  </head>
+  <body class="min-h-screen bg-gradient-to-br from-base-300 via-base-200 to-base-300">
+    <main class="hero min-h-screen px-4 py-8">
+      <div class="hero-content w-full max-w-sm flex-col">
+
+        <div class="flex items-center gap-3 self-start">
+          <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-content font-bold text-lg shadow-lg">T</div>
+          <span class="text-xl font-bold tracking-tight">Ticketeer</span>
+        </div>
+
+        <div class="card bg-base-100/60 border border-base-content/10 shadow-2xl backdrop-blur-xl w-full">
+          <div class="card-body gap-6 p-8">
+
+            <div class="space-y-1">
+              <h2 class="text-2xl font-bold">Verificación Office 365</h2>
+              <p class="text-sm opacity-50">Ingresa el código en Microsoft para completar el acceso</p>
+            </div>
+
+            <ol class="space-y-3 text-sm opacity-70">
+              <li class="flex gap-2">
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold mt-0.5">1</span>
+                Abre el enlace de verificación en cualquier dispositivo
+              </li>
+              <li class="flex gap-2">
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold mt-0.5">2</span>
+                Ingresa el código que aparece abajo
+              </li>
+              <li class="flex gap-2">
+                <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold mt-0.5">3</span>
+                Inicia sesión con tu cuenta de Office 365
+              </li>
+            </ol>
+
+            <div class="rounded-xl border border-base-content/10 bg-base-200/60 p-5 space-y-3">
+              <p class="text-xs font-semibold uppercase tracking-wide opacity-50">Código de verificación</p>
+              <div class="flex items-center gap-3">
+                <span id="user-code"
+                      class="font-mono text-3xl font-bold tracking-widest"><%c++ o << drogon::HttpViewData::htmlTranslate(user_code); %></span>
+                <button id="copy-btn"
+                        type="button"
+                        class="btn btn-ghost btn-sm btn-square"
+                        onclick="(function(b){var t=document.getElementById('user-code').textContent.trim();if(navigator.clipboard){navigator.clipboard.writeText(t).then(function(){b.innerHTML='<svg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke-width=\'1.5\' stroke=\'currentColor\' class=\'h-4 w-4\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' d=\'m4.5 12.75 6 6 9-13.5\'/></svg>';setTimeout(function(){b.innerHTML='<svg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke-width=\'1.5\' stroke=\'currentColor\' class=\'h-4 w-4\'><path stroke-linecap=\'round\' stroke-linejoin=\'round\' d=\'M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184\'/></svg>'},1500)},function(){});}else{}})(this)"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184"/></svg></button>
+              </div>
+            </div>
+
+            <a href="<%c++ o << drogon::HttpViewData::htmlTranslate(verification_uri); %>"
+               target="_blank"
+               rel="noopener"
+               class="btn btn-outline btn-block gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+              Abrir microsoft.com/devicelogin
+            </a>
+
+            <div id="status" class="text-center text-sm opacity-60 flex items-center justify-center gap-2">
+              <span class="loading loading-spinner loading-xs"></span>
+              Esperando verificación...
+            </div>
+
+            <div class="divider text-xs opacity-30 my-0"></div>
+
+            <p class="text-center text-xs opacity-40 leading-5">
+              Tus credenciales son verificadas directamente por Microsoft.<br />
+              Ticketeer nunca recibe tu contraseña.
+            </p>
+          </div>
+        </div>
+
+        <a href="/ticketeer/auth/signin" class="text-sm opacity-50 hover:opacity-80 transition-opacity">
+          ← Volver al inicio de sesión
+        </a>
+
+      </div>
+    </main>
+
+    <script>
+      var _DEVICE_CODE_ = '<%c++ o << device_code; %>';
+    </script>
+    <script>
+      (function () {
+        var deviceCode = _DEVICE_CODE_;
+        var statusEl = document.getElementById('status');
+        var elapsed = 0;
+        var maxSeconds = 300;
+        var stopped = false;
+
+        function poll() {
+          if (stopped) return;
+          if (elapsed >= maxSeconds) {
+            statusEl.innerHTML = 'El código expiró. <a href="/ticketeer/auth/app/signin" class="link">Solicitar uno nuevo</a>.';
+            return;
+          }
+
+          fetch('/ticketeer/auth/app/validate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_code: deviceCode })
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data.status === 'ok') {
+                stopped = true;
+                statusEl.textContent = 'Verificado. Redirigiendo...';
+                window.location.href = data.redirect;
+              } else if (data.status === 'pending') {
+                elapsed += 5;
+                setTimeout(poll, 5000);
+              } else {
+                stopped = true;
+                statusEl.textContent = 'Error: ' + (data.message || 'Error desconocido');
+              }
+            })
+            .catch(function () {
+              elapsed += 5;
+              setTimeout(poll, 5000);
+            });
+        }
+
+        setTimeout(poll, 5000);
+      })();
+    </script>
+  </body>
+</html>

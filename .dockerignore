@@ -1,0 +1,12 @@
+.git
+.cache
+build
+compile_commands.json
+.DS_Store
+*.o
+*.a
+*.so
+*.dylib
+db/*
+!db/migrations/
+!db/migrations/*.sql
