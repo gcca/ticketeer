@@ -1,0 +1,73 @@
+<%c++
+  using Row = std::map<std::string, std::string>;
+  using Rows = std::vector<Row>;
+  auto& priorities = std::any_cast<Rows&>(@@["priorities"]);
+  auto& body_maxlength = std::any_cast<std::string&>(@@["body_maxlength"]);
+  auto& default_ticket_priority_id = std::any_cast<std::string&>(@@["default_ticket_priority_id"]);
+  auto& o = technician_ticket_create_tmp_stream;
+%>
+<div>
+  <div class="mb-6 flex items-center gap-3">
+    <button class="btn btn-ghost btn-sm"
+            hx-get="/ticketeer/technician/ticket/list"
+            hx-target="#main-content"
+            hx-swap="innerHTML">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+      </svg>
+      Volver
+    </button>
+    <div>
+      <h1 class="text-2xl font-bold">Nuevo ticket</h1>
+      <p class="mt-1 text-sm opacity-60">Registra una solicitud de soporte</p>
+    </div>
+  </div>
+
+  <form class="space-y-6"
+        hx-post="/ticketeer/technician/ticket/create"
+        hx-target="#main-content"
+        hx-swap="innerHTML">
+    <div class="grid gap-4 md:grid-cols-2">
+      <label class="form-control w-full">
+        <div class="label pb-1">
+          <span class="label-text text-xs font-semibold uppercase opacity-60">Prioridad</span>
+        </div>
+        <select name="priority_id" class="select select-bordered w-full" required>
+          <option value="" disabled<%c++ if (default_ticket_priority_id.empty()) { o << " selected"; } %>>Selecciona una prioridad</option>
+<%c++ for (const auto& row : priorities) { %>
+          <option value="<%c++ o << row.at("id"); %>"<%c++ if (row.at("id") == default_ticket_priority_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(row.at("name")); %></option>
+<%c++ } %>
+        </select>
+      </label>
+    </div>
+
+    <label class="form-control w-full">
+      <div class="label pb-1">
+        <span class="label-text text-xs font-semibold uppercase opacity-60">Detalle</span>
+        <span class="label-text-alt text-xs opacity-60" id="body-counter">0/<%c++ o << body_maxlength; %></span>
+      </div>
+      <textarea name="body"
+                class="textarea textarea-bordered min-h-36 w-full"
+                placeholder="Escribe el detalle de la solicitud o incidente"
+                maxlength="<%c++ o << body_maxlength; %>"
+                oninput="document.getElementById('body-counter').textContent = this.value.length + '/<%c++ o << body_maxlength; %>'"
+                required></textarea>
+    </label>
+
+    <div class="flex justify-end gap-2 border-t border-base-300 pt-4">
+      <button type="button"
+              class="btn btn-ghost"
+              hx-get="/ticketeer/technician/ticket/list"
+              hx-target="#main-content"
+              hx-swap="innerHTML">
+        Cancelar
+      </button>
+      <button type="submit" class="btn btn-primary">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+        </svg>
+        Crear ticket
+      </button>
+    </div>
+  </form>
+</div>

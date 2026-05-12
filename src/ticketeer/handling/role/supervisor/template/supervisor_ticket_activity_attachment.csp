@@ -1,0 +1,11 @@
+<%c++
+  using Row = std::map<std::string, std::string>;
+  auto& ticket_id = std::any_cast<std::string&>(@@["ticket_id"]);
+  auto& activity_id = std::any_cast<std::string&>(@@["activity_id"]);
+  auto& attachment = std::any_cast<Row&>(@@["attachment"]);
+  auto& o = supervisor_ticket_activity_attachment_tmp_stream;
+%>
+<a class="badge badge-outline gap-1"
+   href="/ticketeer/supervisor/ticket/<%c++ o << ticket_id; %>/activity/<%c++ o << activity_id; %>/attachment/<%c++ o << attachment.at("id"); %>/download">
+  <%c++ o << drogon::HttpViewData::htmlTranslate(attachment.at("file_name")); %>
+</a>

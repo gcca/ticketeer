@@ -1,0 +1,37 @@
+<%c++
+  using Row = std::map<std::string, std::string>;
+  auto& ticket_id = std::any_cast<std::string&>(@@["ticket_id"]);
+  auto& a = std::any_cast<Row&>(@@["activity"]);
+  auto& o = requester_ticket_activity_message_tmp_stream;
+%>
+<div class="flex gap-3">
+  <div class="avatar placeholder flex-shrink-0">
+    <div class="w-8 rounded-full bg-base-300 text-base-content">
+      <span class="text-xs"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("profile_name").size() >= 2 ? a.at("profile_name").substr(0, 2) : "??"); %></span>
+    </div>
+  </div>
+  <div class="flex-1">
+    <div class="flex items-baseline gap-2">
+      <span class="text-sm font-semibold"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("profile_name")); %></span>
+      <span class="text-xs opacity-50"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("created_at")); %></span>
+    </div>
+    <p class="text-sm opacity-80 mt-0.5"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("body")); %></p>
+    <div id="attachments-<%c++ o << a.at("id"); %>" class="mt-2 flex flex-wrap items-center gap-2">
+      <form hx-post="/ticketeer/requester/ticket/<%c++ o << ticket_id; %>/activity/<%c++ o << a.at("id"); %>/attachment/create"
+            hx-target="#attachments-<%c++ o << a.at("id"); %>"
+            hx-swap="beforeend"
+            hx-encoding="multipart/form-data"
+            hx-trigger="change from:input[type=file]"
+            hx-on::after-request="this.reset()">
+        <input type="file" name="file" multiple class="hidden" />
+        <button type="button"
+                onclick="this.previousElementSibling.click()"
+                class="badge badge-ghost cursor-pointer gap-1 border-dashed opacity-60 hover:opacity-100">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-3 w-3">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+          </svg>
+        </button>
+      </form>
+    </div>
+  </div>
+</div>

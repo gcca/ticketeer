@@ -1,0 +1,5 @@
+<%c++
+  auto& priority_name = std::any_cast<std::string&>(@@["priority_name"]);
+  auto& o = supervisor_ticket_priority_badge_tmp_stream;
+%>
+<span id="ticket-priority-badge" class="badge badge-outline"><%c++ o << drogon::HttpViewData::htmlTranslate(priority_name); %></span>

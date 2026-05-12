@@ -1,0 +1,164 @@
+#include <drogon/MultiPart.h>
+
+#include "ticketeer/core/conf.hpp"
+#include "ticketeer/handling/role/requester/routes.hpp"
+#include "ticketeer/handling/role/requester/routes/common.hpp"
+
+namespace ticketeer {
+
+using namespace ticketeer::handling::role::requester::routes::common;
+
+void Requester::TicketActivityAttachmentCreatePost(
+    const drogon::HttpRequestPtr &req, Callback &&callback,
+    const std::string &ticket_id, const std::string &activity_id) {
+  const auto token = req->getCookie("token");
+
+  if (req->contentType() != drogon::CT_MULTIPART_FORM_DATA)
+    return BadRequest(callback, "Content-Type must be multipart/form-data");
+
+  drogon::MultiPartParser parser;
+  if (parser.parse(req) != 0)
+    return BadRequest(callback, "Invalid multipart form-data");
+
+  const auto &files = parser.getFiles();
+  if (files.empty())
+    return BadRequest(callback, "Missing file");
+
+  std::size_t upload_total = 0;
+  for (const auto &f : files)
+    upload_total += f.fileLength();
+
+  sqlite3 *db = Connect();
+  if (!db)
+    return BadRequest(callback, "Database unavailable",
+                      drogon::k503ServiceUnavailable);
+
+  const auto activity_maxsize = FetchTicketActivityAttachmentMaxsize(db);
+  const auto ticket_maxsize = FetchTicketAttachmentMaxsize(db);
+
+  if (upload_total > activity_maxsize) {
+    sqlite3_close(db);
+    return BadRequest(callback, "Files exceed activity attachment limit",
+                      drogon::k413RequestEntityTooLarge);
+  }
+
+  const auto profile = FetchProfile(db, token);
+  if (!profile) {
+    sqlite3_close(db);
+    return BadRequest(callback, "Forbidden", drogon::k403Forbidden);
+  }
+
+  if (!TicketActivityBelongsToRequester(db, ticket_id, activity_id,
+                                        profile->id)) {
+    sqlite3_close(db);
+    return BadRequest(callback, "Ticket activity not found",
+                      drogon::k404NotFound);
+  }
+
+  if (FetchActivityAttachmentTotal(db, activity_id) + upload_total >
+      activity_maxsize) {
+    sqlite3_close(db);
+    return BadRequest(callback, "Activity attachments would exceed limit",
+                      drogon::k413RequestEntityTooLarge);
+  }
+
+  if (FetchTicketAttachmentTotal(db, ticket_id) + upload_total >
+      ticket_maxsize) {
+    sqlite3_close(db);
+    return BadRequest(callback, "Ticket attachments would exceed limit",
+                      drogon::k413RequestEntityTooLarge);
+  }
+
+  auto exec = [&](const char *sql) {
+    return sqlite3_exec(db, sql, nullptr, nullptr, nullptr) == SQLITE_OK;
+  };
+
+  std::string html;
+  for (const auto &upload_file : files) {
+    const std::string fname =
+        std::filesystem::path(upload_file.getFileName()).filename().string();
+    if (fname.empty())
+      continue;
+    const auto fsize = upload_file.fileLength();
+    const std::string mime = InferMimeType(fname);
+
+    if (!exec("BEGIN IMMEDIATE"))
+      continue;
+
+    sqlite3_stmt *insert = nullptr;
+    if (sqlite3_prepare_v2(db,
+                           "INSERT INTO helpdesk_ticket_activity_attachment"
+                           " (ticket_activity_id, file_path, file_name,"
+                           "  file_size, mime_type)"
+                           " VALUES (?, '', ?, ?, ?)",
+                           -1, &insert, nullptr) != SQLITE_OK) {
+      exec("ROLLBACK");
+      continue;
+    }
+    sqlite3_bind_text(insert, 1, activity_id.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(insert, 2, fname.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_int64(insert, 3, static_cast<sqlite3_int64>(fsize));
+    sqlite3_bind_text(insert, 4, mime.c_str(), -1, SQLITE_STATIC);
+    if (sqlite3_step(insert) != SQLITE_DONE) {
+      sqlite3_finalize(insert);
+      exec("ROLLBACK");
+      continue;
+    }
+    sqlite3_finalize(insert);
+
+    const auto att_id = std::to_string(sqlite3_last_insert_rowid(db));
+    const std::filesystem::path rel =
+        std::filesystem::path("role") / ("ticket_id=" + ticket_id) /
+        ("activity_id=" + activity_id) / ("attachment_id=" + att_id);
+    const auto abs_path = std::filesystem::current_path() /
+                          ticketeer::core::conf::settings.UPLOAD_DIR / rel /
+                          fname;
+
+    if (!WriteFile(abs_path, upload_file.fileContent())) {
+      exec("ROLLBACK");
+      continue;
+    }
+
+    sqlite3_stmt *upd = nullptr;
+    const std::string rel_str = rel.generic_string();
+    if (sqlite3_prepare_v2(
+            db,
+            "UPDATE helpdesk_ticket_activity_attachment SET file_path = ?"
+            " WHERE id = ?",
+            -1, &upd, nullptr) != SQLITE_OK ||
+        [&] {
+          sqlite3_bind_text(upd, 1, rel_str.c_str(), -1, SQLITE_STATIC);
+          sqlite3_bind_text(upd, 2, att_id.c_str(), -1, SQLITE_STATIC);
+          return sqlite3_step(upd) != SQLITE_DONE;
+        }()) {
+      if (upd)
+        sqlite3_finalize(upd);
+      std::error_code ec;
+      std::filesystem::remove(abs_path, ec);
+      exec("ROLLBACK");
+      continue;
+    }
+    sqlite3_finalize(upd);
+
+    if (!exec("COMMIT")) {
+      std::error_code ec;
+      std::filesystem::remove(abs_path, ec);
+      continue;
+    }
+
+    html += "<a class=\"badge badge-outline gap-1\" href=\"/ticketeer/requester"
+            "/ticket/" +
+            ticket_id + "/activity/" + activity_id + "/attachment/" + att_id +
+            "/download\">" +
+            std::string(drogon::HttpViewData::htmlTranslate(fname)) + "</a>\n";
+  }
+  sqlite3_close(db);
+
+  auto resp = drogon::HttpResponse::newHttpResponse();
+  resp->setContentTypeCode(drogon::CT_NONE);
+  resp->addHeader("Content-Type", "text/html; charset=utf-8");
+  resp->setBody(html);
+  callback(resp);
+}
+
+} // namespace ticketeer
