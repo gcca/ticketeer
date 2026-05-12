@@ -1,0 +1,5 @@
+<%c++
+  auto& status_name = std::any_cast<std::string&>(@@["status_name"]);
+  auto& o = supervisor_ticket_status_badge_tmp_stream;
+%>
+<span id="ticket-status-badge" class="badge badge-ghost"><%c++ o << drogon::HttpViewData::htmlTranslate(status_name); %></span>

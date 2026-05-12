@@ -1,0 +1,227 @@
+<%c++
+  using Row = std::map<std::string, std::string>;
+  using Rows = std::vector<Row>;
+  auto& ticket = std::any_cast<Row&>(@@["ticket"]);
+  auto& activities = std::any_cast<Rows&>(@@["activities"]);
+  auto& attachments = std::any_cast<Rows&>(@@["attachments"]);
+  auto& statuses = std::any_cast<Rows&>(@@["statuses"]);
+  auto& departments = std::any_cast<Rows&>(@@["departments"]);
+  auto& assignees = std::any_cast<Rows&>(@@["assignees"]);
+  auto& request_types = std::any_cast<Rows&>(@@["request_types"]);
+  auto& priorities = std::any_cast<Rows&>(@@["priorities"]);
+  auto& o = supervisor_ticket_details_tmp_stream;
+%>
+<div>
+  <div class="mb-6 flex flex-wrap items-center gap-3">
+    <button class="btn btn-ghost btn-sm"
+            hx-get="/ticketeer/supervisor/ticket/list"
+            hx-target="#main-content"
+            hx-swap="innerHTML"
+            hx-push-url="?t=tickets">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+      </svg>
+      Volver
+    </button>
+    <h1 class="text-2xl font-bold">Ticket #<%c++ o << ticket.at("id"); %></h1>
+    <span id="ticket-status-badge" class="badge badge-ghost"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("status_name")); %></span>
+    <span id="ticket-priority-badge" class="badge badge-outline"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("priority_name")); %></span>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-3">
+    <div class="space-y-6 lg:col-span-2">
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title text-base">Descripción</h2>
+          <p class="text-sm leading-relaxed"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("description")); %></p>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body gap-4">
+          <h2 class="card-title text-base">Actividad</h2>
+          <div id="activities" class="space-y-3">
+<%c++ if (activities.empty()) { %>
+            <p class="text-sm opacity-50">No hay actividad registrada.</p>
+<%c++ } else { for (const auto& a : activities) { %>
+            <div class="flex gap-3">
+              <div class="avatar placeholder flex-shrink-0">
+                <div class="flex items-center justify-center w-8 rounded-full bg-base-300 text-base-content">
+                  <span class="text-xs"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("profile_name").size() >= 2 ? a.at("profile_name").substr(0, 2) : "??"); %></span>
+                </div>
+              </div>
+              <div class="flex-1">
+                <div class="flex flex-wrap items-baseline gap-2">
+                  <span class="text-sm font-semibold"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("profile_name")); %></span>
+                  <span class="badge badge-xs badge-ghost"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("kind")); %></span>
+                  <span class="text-xs opacity-50"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("created_at")); %></span>
+                </div>
+                <p class="mt-0.5 text-sm opacity-80"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("body")); %></p>
+                <div id="attachments-<%c++ o << a.at("id"); %>" class="mt-2 flex flex-wrap items-center gap-2">
+                  <form hx-post="/ticketeer/supervisor/ticket/<%c++ o << ticket.at("id"); %>/activity/<%c++ o << a.at("id"); %>/attachment/create"
+                        hx-target="#attachments-<%c++ o << a.at("id"); %>"
+                        hx-swap="beforeend"
+                        hx-encoding="multipart/form-data"
+                        hx-trigger="change from:input[type=file]"
+                        hx-on::after-request="this.reset()">
+                    <input type="file" name="file" multiple class="hidden" />
+                    <button type="button"
+                            onclick="this.previousElementSibling.click()"
+                            class="badge badge-ghost cursor-pointer gap-1 border-dashed opacity-60 hover:opacity-100">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-3 w-3">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 002.112 2.13" />
+                      </svg>
+                    </button>
+                  </form>
+<%c++ for (const auto& f : attachments) { if (f.at("activity_id") == a.at("id")) { %>
+                  <a class="badge badge-outline gap-1"
+                     href="/ticketeer/supervisor/ticket/<%c++ o << ticket.at("id"); %>/activity/<%c++ o << a.at("id"); %>/attachment/<%c++ o << f.at("id"); %>/download">
+                    <%c++ o << drogon::HttpViewData::htmlTranslate(f.at("file_name")); %>
+                  </a>
+<%c++ } } %>
+                </div>
+              </div>
+            </div>
+<%c++ } } %>
+          </div>
+
+          <form hx-post="/ticketeer/supervisor/ticket/<%c++ o << ticket.at("id"); %>/activity/create/message"
+                hx-target="#activities"
+                hx-swap="beforeend"
+                hx-on::after-request="this.reset()"
+                class="flex gap-2 border-t border-base-300 pt-2">
+            <input type="text"
+                   name="message"
+                   placeholder="Escribe un mensaje..."
+                   class="input input-bordered input-sm flex-1"
+                   required />
+            <button type="submit" class="btn btn-primary btn-sm">Enviar</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <div class="card bg-base-100 shadow">
+        <div class="card-body gap-3">
+          <h2 class="card-title text-base">Detalles</h2>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between gap-3">
+              <span class="shrink-0 opacity-60">Solicitante</span>
+              <div class="tooltip tooltip-left min-w-0" data-tip="<%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("requester_name")); %>">
+                <span class="block truncate text-right font-medium"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("requester_name")); %></span>
+              </div>
+            </div>
+            <div class="flex justify-between gap-3">
+              <span class="shrink-0 opacity-60">Usuario</span>
+              <div class="tooltip tooltip-left min-w-0" data-tip="<%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("requester_username")); %>">
+                <span class="block truncate text-right font-medium"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("requester_username")); %></span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <label for="ticket-priority" class="opacity-60">Prioridad</label>
+              <form hx-post="/ticketeer/supervisor/ticket/<%c++ o << ticket.at("id"); %>/priority"
+                    hx-target="#ticket-priority-badge"
+                    hx-swap="outerHTML"
+                    hx-trigger="change"
+                    hx-on::after-request="if(event.detail.successful) htmx.ajax('GET', '/ticketeer/supervisor/ticket/<%c++ o << ticket.at("id"); %>/activity/list', {target:'#activities', swap:'innerHTML'})"
+                    class="min-w-40">
+                <select id="ticket-priority"
+                        name="new_priority"
+                        class="select select-bordered select-sm w-full">
+<%c++ for (const auto& pr : priorities) { %>
+                  <option value="<%c++ o << pr.at("id"); %>"<%c++ if (pr.at("id") == ticket.at("priority_id")) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(pr.at("name")); %></option>
+<%c++ } %>
+                </select>
+              </form>
+            </div>
+            <div class="flex items-center justify-between gap-3"
+                 hx-on::after-request="if(event.detail.successful) htmx.ajax('GET', '/ticketeer/supervisor/ticket/<%c++ o << ticket.at("id"); %>/activity/list', {target:'#activities', swap:'innerHTML'})">
+              <label for="ticket-request-type" class="opacity-60">Tipo</label>
+              <form id="ticket-request-type-form"
+                    hx-post="/ticketeer/supervisor/ticket/<%c++ o << ticket.at("id"); %>/request_type"
+                    hx-target="#ticket-request-type-form"
+                    hx-swap="outerHTML"
+                    hx-trigger="change"
+                    class="min-w-40">
+                <select id="ticket-request-type"
+                        name="new_request_type"
+                        class="select select-bordered select-sm w-full">
+<%c++ for (const auto& rt : request_types) { %>
+                  <option value="<%c++ o << rt.at("id"); %>"<%c++ if (rt.at("id") == ticket.at("request_type_id")) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(rt.at("name")); %></option>
+<%c++ } %>
+                </select>
+              </form>
+            </div>
+            <div class="flex items-center justify-between gap-3"
+                 hx-on::after-request="if(event.detail.successful) htmx.ajax('GET', '/ticketeer/supervisor/ticket/<%c++ o << ticket.at("id"); %>/activity/list', {target:'#activities', swap:'innerHTML'})">
+              <label for="ticket-department" class="opacity-60">Área</label>
+              <form id="ticket-department-form"
+                    hx-post="/ticketeer/supervisor/ticket/<%c++ o << ticket.at("id"); %>/department"
+                    hx-target="#ticket-department-form"
+                    hx-swap="outerHTML"
+                    hx-trigger="change"
+                    class="min-w-40">
+                <select id="ticket-department"
+                        name="new_department"
+                        class="select select-bordered select-sm w-full">
+<%c++ for (const auto& dept : departments) { %>
+                  <option value="<%c++ o << dept.at("id"); %>"<%c++ if (dept.at("id") == ticket.at("department_id")) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(dept.at("name")); %></option>
+<%c++ } %>
+                </select>
+              </form>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <label for="ticket-status" class="opacity-60">Estado</label>
+              <form hx-post="/ticketeer/supervisor/ticket/<%c++ o << ticket.at("id"); %>/status"
+                    hx-target="#ticket-status-badge"
+                    hx-swap="outerHTML"
+                    hx-trigger="change"
+                    hx-on::after-request="if(event.detail.successful) htmx.ajax('GET', '/ticketeer/supervisor/ticket/<%c++ o << ticket.at("id"); %>/activity/list', {target:'#activities', swap:'innerHTML'})"
+                    class="min-w-40">
+                <select id="ticket-status"
+                        name="new_status"
+                        class="select select-bordered select-sm w-full">
+<%c++ for (const auto& status : statuses) { %>
+                  <option value="<%c++ o << status.at("id"); %>"<%c++ if (status.at("id") == ticket.at("status_id")) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(status.at("name")); %></option>
+<%c++ } %>
+                </select>
+              </form>
+            </div>
+            <div class="flex items-center justify-between gap-3"
+                 hx-on::after-request="if(event.detail.successful) htmx.ajax('GET', '/ticketeer/supervisor/ticket/<%c++ o << ticket.at("id"); %>/activity/list', {target:'#activities', swap:'innerHTML'})">
+              <label for="ticket-assigned-to" class="opacity-60">Asignado a</label>
+              <form id="ticket-assigned-to-form"
+                    hx-post="/ticketeer/supervisor/ticket/<%c++ o << ticket.at("id"); %>/assigned_to"
+                    hx-target="#ticket-assigned-to-form"
+                    hx-swap="outerHTML"
+                    hx-trigger="change"
+                    class="min-w-40">
+                <select id="ticket-assigned-to"
+                        name="new_assigned_to"
+                        class="select select-bordered select-sm w-full">
+                  <option value=""<%c++ if (ticket.at("assigned_to_id").empty()) { o << " selected"; } %>>Sin asignar</option>
+<%c++ for (const auto& a : assignees) { %>
+                  <option value="<%c++ o << a.at("id"); %>"<%c++ if (a.at("id") == ticket.at("assigned_to_id")) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("name")); %></option>
+<%c++ } %>
+                </select>
+              </form>
+            </div>
+            <div class="flex justify-between gap-3">
+              <span class="shrink-0 opacity-60">Creado</span>
+              <div class="tooltip tooltip-left min-w-0" data-tip="<%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("created_at")); %>">
+                <span class="block truncate text-right font-medium"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("created_at")); %></span>
+              </div>
+            </div>
+<%c++ if (!ticket.at("due_date").empty()) { %>
+            <div class="flex justify-between gap-3">
+              <span class="opacity-60">Fecha limite</span>
+              <span class="text-right font-medium"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("due_date")); %></span>
+            </div>
+<%c++ } %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

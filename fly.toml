@@ -1,0 +1,28 @@
+app = 'ticketeer'
+primary_region = 'ord'
+
+[build]
+  image = 'ghcr.io/gcca/ticketeer:latest'
+
+[env]
+  DB_URL = '/app/db/ticketeer.db'
+  UPLOAD_DIR = '/app/db/upload'
+
+[[mounts]]
+  source = 'ticketeer_data'
+  destination = '/app/db'
+
+[http_service]
+  internal_port = 5521
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = 'requests'
+    hard_limit = 100
+    soft_limit = 80
+
+[[vm]]
+  size = 'shared-cpu-1x'

@@ -1,0 +1,171 @@
+<%c++
+  auto& o = signin_tmp_stream;
+  auto& error = std::any_cast<std::string&>(@@["error"]);
+%>
+<!doctype html>
+<html lang="es" data-theme="dim">
+  <head>
+    <script>(function(){var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t);})();</script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ticketeer | Iniciar sesión</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet" />
+    <style>body { font-family: 'JetBrains Mono', monospace; font-weight: 300; }</style>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        const form = document.getElementById('signin-form');
+        const submit = document.getElementById('signin-submit');
+        const spinner = document.getElementById('signin-spinner');
+        const label = document.getElementById('signin-submit-label');
+
+        function setLoading(loading) {
+          submit.disabled = loading;
+          submit.setAttribute('aria-busy', loading ? 'true' : 'false');
+          spinner.classList.toggle('hidden', !loading);
+          label.textContent = loading ? 'Ingresando...' : 'Iniciar sesión';
+        }
+
+        if (!form || !submit || !spinner || !label) return;
+
+        form.addEventListener('submit', function () {
+          setLoading(true);
+        });
+
+        window.addEventListener('pageshow', function () {
+          setLoading(false);
+        });
+      });
+    </script>
+  </head>
+  <body class="min-h-screen bg-gradient-to-br from-base-300 via-base-200 to-base-300">
+    <main class="hero min-h-screen px-4 py-8">
+      <div class="hero-content w-full max-w-5xl flex-col gap-10 lg:flex-row lg:gap-16">
+
+        <section class="w-full max-w-md space-y-8 lg:max-w-none lg:flex-1">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-content font-bold text-lg shadow-lg">T</div>
+            <span class="text-xl font-bold tracking-tight">Ticketeer</span>
+          </div>
+
+          <div class="space-y-4">
+            <h1 class="text-4xl font-extrabold tracking-tight sm:text-5xl leading-tight">
+              Mesa de ayuda<br />
+              <span class="text-primary">bajo control</span>
+            </h1>
+            <p class="text-base leading-7 opacity-60 max-w-sm">
+              Gestiona incidentes y solicitudes de servicio desde un único panel
+              seguro y enfocado en tu equipo.
+            </p>
+          </div>
+
+          <ul class="space-y-3">
+            <li class="flex items-center gap-3 text-sm opacity-70">
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">✓</span>
+              Seguimiento de tickets en tiempo real
+            </li>
+            <li class="flex items-center gap-3 text-sm opacity-70">
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">✓</span>
+              Asignación y priorización automática
+            </li>
+            <li class="flex items-center gap-3 text-sm opacity-70">
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-bold">✓</span>
+              Historial completo de actividad
+            </li>
+          </ul>
+        </section>
+
+        <section class="w-full max-w-sm lg:flex-shrink-0">
+          <div class="card bg-base-100/60 border border-base-content/10 shadow-2xl backdrop-blur-xl">
+            <div class="card-body gap-6 p-8">
+              <div class="space-y-1">
+                <h2 class="text-2xl font-bold">Bienvenido</h2>
+                <p class="text-sm opacity-50">Ingresa tus credenciales para continuar</p>
+              </div>
+
+<%c++ if (!error.empty()) { %>
+              <div role="alert" class="alert alert-error items-start text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                  <path fill-rule="evenodd" d="M9.4 3.1c1.2-2.1 4-2.1 5.2 0l8.8 15.2c1.2 2-.3 4.5-2.6 4.5H3.2C.9 22.8-.6 20.3.6 18.3L9.4 3.1zM12 8a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0V9a1 1 0 0 1 1-1zm0 9.5a1.2 1.2 0 1 0 0-2.4 1.2 1.2 0 0 0 0 2.4z" clip-rule="evenodd"/>
+                </svg>
+                <span><%c++ o << drogon::HttpViewData::htmlTranslate(error); %></span>
+              </div>
+<%c++ } %>
+
+              <form id="signin-form" method="post" action="/ticketeer/auth/signin" class="space-y-4">
+                <label class="form-control w-full">
+                  <div class="label pb-1">
+                    <span class="label-text text-xs font-semibold uppercase tracking-wide opacity-60">Usuario</span>
+                  </div>
+                  <label class="input input-bordered flex items-center gap-2 focus-within:input-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-40" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+                    </svg>
+                    <input
+                      name="username"
+                      type="text"
+                      autocomplete="username"
+                      autocapitalize="none"
+                      spellcheck="false"
+                      class="grow bg-transparent text-sm"
+                      placeholder="tu.usuario"
+                      required
+                    />
+                  </label>
+                </label>
+
+                <label class="form-control w-full">
+                  <div class="label pb-1">
+                    <span class="label-text text-xs font-semibold uppercase tracking-wide opacity-60">Contraseña</span>
+                  </div>
+                  <label class="input input-bordered flex items-center gap-2 focus-within:input-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 opacity-40" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M18 8h-1V6A5 5 0 0 0 7 6v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zm-6 9a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm3.1-9H8.9V6a3.1 3.1 0 0 1 6.2 0v2z"/>
+                    </svg>
+                    <input
+                      name="password"
+                      type="password"
+                      autocomplete="current-password"
+                      class="grow bg-transparent text-sm"
+                      placeholder="••••••••"
+                      required
+                    />
+                  </label>
+                </label>
+
+                <button id="signin-submit" type="submit" aria-busy="false" class="btn btn-primary btn-block mt-2 shadow-lg shadow-primary/20">
+                  <span id="signin-spinner" class="loading loading-spinner loading-sm hidden" aria-hidden="true"></span>
+                  <span id="signin-submit-label">Iniciar sesión</span>
+                </button>
+              </form>
+
+              <div class="divider text-xs opacity-30 my-0">o</div>
+
+              <a href="/ticketeer/auth/app/signin" class="btn btn-outline btn-block gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 23 23" class="h-4 w-4 shrink-0">
+                  <path fill="#f3f3f3" d="M0 0h23v23H0z"/>
+                  <path fill="#f35325" d="M1 1h10v10H1z"/>
+                  <path fill="#81bc06" d="M12 1h10v10H12z"/>
+                  <path fill="#05a6f0" d="M1 12h10v10H1z"/>
+                  <path fill="#ffba08" d="M12 12h10v10H12z"/>
+                </svg>
+                Iniciar sesión con Office 365
+              </a>
+
+              <div class="divider text-xs opacity-30 my-0">acceso protegido</div>
+
+              <p class="text-center text-xs opacity-40 leading-5">
+                ¿Problemas para acceder? Contacta a tu administrador.
+              </p>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </body>
+</html>

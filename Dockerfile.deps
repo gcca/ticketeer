@@ -1,0 +1,61 @@
+# syntax=docker/dockerfile:1.7
+
+ARG ALPINE_VERSION=3.23
+ARG BUILD_JOBS=4
+ARG CMAKE_VERSION=4.3.2
+ARG DROGON_VERSION=1.9.13
+ARG QUILL_VERSION=11.1.0
+
+FROM alpine:${ALPINE_VERSION}
+
+ARG BUILD_JOBS
+ARG CMAKE_VERSION
+ARG DROGON_VERSION
+ARG QUILL_VERSION
+
+ENV CMAKE_BUILD_PARALLEL_LEVEL=${BUILD_JOBS} \
+    CMAKE_PREFIX_PATH=/usr/local \
+    LD_LIBRARY_PATH=/usr/local/lib
+
+RUN apk add --no-cache \
+    build-base \
+    c-ares-dev \
+    git \
+    jsoncpp-dev \
+    linux-headers \
+    ninja-is-really-ninja \
+    openssl-dev \
+    py3-pip \
+    python3 \
+    sqlite-dev \
+    util-linux-dev \
+    zlib-dev
+
+RUN python3 -m pip install --break-system-packages --no-cache-dir "cmake==${CMAKE_VERSION}"
+
+WORKDIR /tmp/deps
+
+RUN git clone --depth 1 --branch "v${QUILL_VERSION}" https://github.com/odygrd/quill.git \
+    && cmake -S quill -B quill/build -GNinja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/usr/local \
+      -DQUILL_ENABLE_INSTALL=ON \
+      -DQUILL_BUILD_EXAMPLES=OFF \
+      -DQUILL_BUILD_TESTS=OFF \
+      -DQUILL_BUILD_BENCHMARKS=OFF \
+    && cmake --build quill/build --target install
+
+RUN git clone --depth 1 --branch "v${DROGON_VERSION}" --recurse-submodules --shallow-submodules https://github.com/drogonframework/drogon.git \
+    && cmake -S drogon -B drogon/build -GNinja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/usr/local \
+      -DBUILD_SHARED_LIBS=ON \
+      -DBUILD_CTL=ON \
+      -DBUILD_EXAMPLES=OFF \
+      -DBUILD_TESTING=OFF \
+      -DBUILD_DOC=OFF \
+      -DBUILD_ORM=OFF \
+      -DBUILD_BROTLI=OFF \
+      -DBUILD_YAML_CONFIG=OFF \
+      -DUSE_SUBMODULE=ON \
+    && cmake --build drogon/build --target install

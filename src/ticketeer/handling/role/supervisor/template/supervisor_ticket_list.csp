@@ -1,0 +1,98 @@
+<%c++
+  using Row = std::map<std::string, std::string>;
+  using Rows = std::vector<Row>;
+  auto& tickets = std::any_cast<Rows&>(@@["tickets"]);
+  auto& search = std::any_cast<std::string&>(@@["search"]);
+  auto& departments = std::any_cast<Rows&>(@@["departments"]);
+  auto& department_id = std::any_cast<std::string&>(@@["department_id"]);
+  auto& o = supervisor_ticket_list_tmp_stream;
+%>
+<div>
+  <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div>
+      <h1 class="text-3xl font-bold">Tickets</h1>
+      <p class="mt-1 text-sm opacity-60">Cola completa de solicitudes de soporte</p>
+    </div>
+    <button class="btn btn-primary btn-sm"
+            hx-get="/ticketeer/supervisor/ticket/create"
+            hx-target="#main-content"
+            hx-swap="innerHTML"
+            hx-push-url="?t=tickets">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+      </svg>
+      Nuevo ticket
+    </button>
+  </div>
+
+  <div class="mb-4 flex flex-wrap gap-3">
+    <input id="ticket-search"
+           type="text"
+           name="s"
+           value="<%c++ o << drogon::HttpViewData::htmlTranslate(search); %>"
+           placeholder="Buscar por solicitante, estado, área o descripción..."
+           class="input input-bordered flex-1 sm:w-96 sm:flex-none"
+           hx-get="/ticketeer/supervisor/ticket/list"
+           hx-target="#main-content"
+           hx-swap="innerHTML"
+           hx-trigger="keyup changed delay:400ms"
+           hx-include="[name='s'],[name='d']"
+           hx-preserve
+           hx-on::after-request="const p=new URLSearchParams(window.location.search); this.value ? p.set('s',this.value) : p.delete('s'); p.set('t','tickets'); history.replaceState(null,'','?'+p.toString())" />
+    <select name="d"
+            class="select select-bordered"
+            hx-get="/ticketeer/supervisor/ticket/list"
+            hx-target="#main-content"
+            hx-swap="innerHTML"
+            hx-trigger="change"
+            hx-include="[name='s'],[name='d']">
+      <option value="">Todas las áreas</option>
+<%c++ for (const auto& dept : departments) { %>
+      <option value="<%c++ o << dept.at("id"); %>"<%c++ if (dept.at("id") == department_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(dept.at("name")); %></option>
+<%c++ } %>
+    </select>
+  </div>
+
+  <div class="overflow-x-auto rounded-lg bg-base-100 shadow">
+    <table class="table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Descripción</th>
+          <th>Solicitante</th>
+          <th>Área</th>
+          <th>Estado</th>
+          <th>Prioridad</th>
+          <th>Asignado</th>
+          <th>Creado</th>
+        </tr>
+      </thead>
+      <tbody>
+<%c++ if (tickets.empty()) { %>
+        <tr>
+          <td colspan="8" class="py-12 text-center opacity-50">No hay tickets para mostrar</td>
+        </tr>
+<%c++ } else { for (const auto& t : tickets) { %>
+        <tr class="hover cursor-pointer"
+            hx-get="/ticketeer/supervisor/ticket/<%c++ o << t.at("id"); %>/details"
+            hx-target="#main-content"
+            hx-swap="innerHTML"
+            hx-push-url="?t=tickets&i=<%c++ o << t.at("id"); %>">
+          <td class="font-mono text-xs opacity-60">#<%c++ o << t.at("id"); %></td>
+          <td class="max-w-sm truncate"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("description")); %></td>
+          <td class="text-sm"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("requester_name")); %></td>
+          <td class="text-sm"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("department_name")); %></td>
+          <td class="max-w-xs">
+            <div class="tooltip w-full" data-tip="<%c++ o << drogon::HttpViewData::htmlTranslate(t.at("status_name")); %>">
+              <span class="badge badge-sm badge-ghost block truncate"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("status_name")); %></span>
+            </div>
+          </td>
+          <td><span class="badge badge-sm badge-outline"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("priority_name")); %></span></td>
+          <td class="text-sm"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("assigned_to_name").empty() ? "Sin asignar" : t.at("assigned_to_name")); %></td>
+          <td class="text-xs opacity-60"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("created_at")); %></td>
+        </tr>
+<%c++ } } %>
+      </tbody>
+    </table>
+  </div>
+</div>

@@ -1,0 +1,91 @@
+<%c++
+  using Row = std::map<std::string, std::string>;
+  auto& tickets = std::any_cast<std::vector<Row>&>(@@["tickets"]);
+  auto& search = std::any_cast<std::string&>(@@["search"]);
+  auto& o = requester_ticket_list_tmp_stream;
+%>
+<div>
+  <div class="mb-6 flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-bold">Mis tickets</h1>
+      <p class="mt-1 text-sm opacity-60">Solicitudes e incidentes registrados</p>
+    </div>
+    <button class="btn btn-primary btn-sm"
+            hx-get="/ticketeer/requester/ticket/create"
+            hx-target="#main-content"
+            hx-swap="innerHTML">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+      </svg>
+      Nuevo ticket
+    </button>
+  </div>
+
+  <div class="mb-4">
+    <input id="ticket-search"
+           type="text"
+           name="s"
+           value="<%c++ o << drogon::HttpViewData::htmlTranslate(search); %>"
+           placeholder="Buscar tickets..."
+           class="input input-bordered w-full sm:w-72"
+           hx-get="/ticketeer/requester/ticket/list"
+           hx-target="#main-content"
+           hx-swap="innerHTML"
+           hx-trigger="keyup changed delay:400ms"
+           hx-include="[name='s']"
+           hx-preserve
+           hx-on::after-request="const p=new URLSearchParams(window.location.search); this.value ? p.set('s',this.value) : p.delete('s'); p.set('t','tickets'); history.replaceState(null,'','?'+p.toString())" />
+  </div>
+
+  <div class="overflow-x-auto rounded-xl bg-base-100 shadow">
+    <table class="table">
+      <thead>
+        <tr>
+          <th></th>
+          <th class="w-1/2">Descripción</th>
+          <th>Tipo</th>
+          <th>Estado</th>
+          <th>Prioridad</th>
+        </tr>
+      </thead>
+      <tbody>
+<%c++ if (tickets.empty()) { %>
+        <tr>
+          <td colspan="5" class="py-12 text-center opacity-50">No hay tickets registrados</td>
+        </tr>
+<%c++ } else { for (const auto& t : tickets) {
+  const auto& _d = t.at("description");
+  const auto _nl = _d.find('\n');
+  const std::size_t _end = (_nl != std::string::npos) ? _nl : _d.size();
+  const std::string _desc_tip = _d.substr(0, std::min(_end, std::size_t(256)));
+%>
+        <tr class="hover cursor-pointer"
+            hx-get="/ticketeer/requester/ticket/<%c++ o << t.at("id"); %>/details"
+            hx-target="#main-content"
+            hx-swap="innerHTML"
+            hx-push-url="?t=tickets&i=<%c++ o << t.at("id"); %>">
+          <td class="font-mono text-xs opacity-60">#<%c++ o << t.at("id"); %></td>
+          <td class="max-w-xs">
+            <div class="tooltip w-full" data-tip="<%c++ o << drogon::HttpViewData::htmlTranslate(_desc_tip); %>">
+              <span class="block truncate"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("description")); %></span>
+            </div>
+          </td>
+          <td class="text-sm max-w-xs">
+            <div class="tooltip w-full" data-tip="<%c++ o << drogon::HttpViewData::htmlTranslate(t.at("request_type_display")); %>">
+              <span class="block truncate"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("request_type_display")); %></span>
+            </div>
+          </td>
+          <td class="max-w-xs">
+            <div class="tooltip w-full" data-tip="<%c++ o << drogon::HttpViewData::htmlTranslate(t.at("status_name")); %>">
+              <span class="badge badge-sm badge-ghost block truncate"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("status_name")); %></span>
+            </div>
+          </td>
+          <td>
+            <span class="badge badge-sm badge-outline"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("priority_name")); %></span>
+          </td>
+        </tr>
+<%c++ } } %>
+      </tbody>
+    </table>
+  </div>
+</div>

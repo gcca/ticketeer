@@ -1,0 +1,18 @@
+services:
+  ticketeer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: execute
+    image: ticketeer:latest
+    environment:
+      DB_URL: /app/db/ticketeer.db
+      UPLOAD_DIR: /app/db/upload
+    ports:
+      - "5521:5521"
+    volumes:
+      - db:/app/db
+    restart: unless-stopped
+
+volumes:
+  db:

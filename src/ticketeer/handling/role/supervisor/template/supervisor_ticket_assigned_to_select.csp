@@ -1,0 +1,21 @@
+<%c++
+  using Row = std::map<std::string, std::string>;
+  using Rows = std::vector<Row>;
+  auto& ticket_id = std::any_cast<std::string&>(@@["ticket_id"]);
+  auto& assigned_to_id = std::any_cast<std::string&>(@@["assigned_to_id"]);
+  auto& assignees = std::any_cast<Rows&>(@@["assignees"]);
+  auto& o = supervisor_ticket_assigned_to_select_tmp_stream;
+%>
+<form id="ticket-assigned-to-form"
+      hx-post="/ticketeer/supervisor/ticket/<%c++ o << ticket_id; %>/assigned_to"
+      hx-target="#ticket-assigned-to-form"
+      hx-swap="outerHTML"
+      hx-trigger="change"
+      class="min-w-40">
+  <select name="new_assigned_to" class="select select-bordered select-sm w-full">
+    <option value=""<%c++ if (assigned_to_id.empty()) { o << " selected"; } %>>Sin asignar</option>
+<%c++ for (const auto& a : assignees) { %>
+    <option value="<%c++ o << a.at("id"); %>"<%c++ if (a.at("id") == assigned_to_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("name")); %></option>
+<%c++ } %>
+  </select>
+</form>
