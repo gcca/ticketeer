@@ -1,7 +1,7 @@
 <%c++
   using Row = std::map<std::string, std::string>;
   auto& a = std::any_cast<Row&>(@@["activity"]);
-  auto& o = requester_ticket_activity_message_tmp_stream;
+  auto& o = ticket_activity_message_tmp_stream;
 %>
 <div class="flex gap-3">
   <div class="avatar placeholder flex-shrink-0">

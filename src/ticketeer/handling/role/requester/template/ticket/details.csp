@@ -2,7 +2,7 @@
   using Row = std::map<std::string, std::string>;
   auto& ticket = std::any_cast<Row&>(@@["ticket"]);
   auto& activities = std::any_cast<std::vector<Row>&>(@@["activities"]);
-  auto& o = requester_ticket_details_tmp_stream;
+  auto& o = ticket_details_tmp_stream;
 %>
 <div>
   <div class="mb-6 flex items-center gap-3">
