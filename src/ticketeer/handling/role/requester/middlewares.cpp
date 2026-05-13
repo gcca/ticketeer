@@ -53,9 +53,7 @@ SELECT p.id
   if (!allowed)
     return mcb(drogon::HttpResponse::newRedirectionResponse("/ticketeer/auth/signin"));
 
-  nextCb([mcb = std::move(mcb)](const drogon::HttpResponsePtr &resp) {
-    mcb(resp);
-  });
+  nextCb(std::move(mcb));
 }
 
 void RoleRequesterRequired::Reject(const drogon::MiddlewareCallback &mcb,

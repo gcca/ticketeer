@@ -1,0 +1,73 @@
+<%c++
+  using Row = std::map<std::string, std::string>;
+  auto& tickets = std::any_cast<std::vector<Row>&>(@@["tickets"]);
+  auto& search = std::any_cast<std::string&>(@@["search"]);
+%>
+<div>
+  <div class="mb-6 flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-bold">Mis tickets</h1>
+      <p class="mt-1 text-sm opacity-60">Solicitudes e incidentes registrados</p>
+    </div>
+    <button class="btn btn-primary btn-sm"
+            hx-get="/ticketeer/requester/v1/ticket/create"
+            hx-target="#main-content"
+            hx-swap="innerHTML">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+      </svg>
+      Nuevo ticket
+    </button>
+  </div>
+
+  <div class="mb-4">
+    <input type="text"
+           name="s"
+           value="<%= search %>"
+           placeholder="Buscar tickets..."
+           class="input input-bordered w-full sm:w-72"
+           hx-get="/ticketeer/requester/v1/ticket/list"
+           hx-target="#main-content"
+           hx-swap="innerHTML"
+           hx-trigger="keyup changed delay:400ms"
+           hx-include="[name='s']" />
+  </div>
+
+  <div class="overflow-x-auto rounded-xl bg-base-100 shadow">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Descripción</th>
+          <th>Tipo</th>
+          <th>Estado</th>
+          <th>Prioridad</th>
+          <th>Creado</th>
+        </tr>
+      </thead>
+      <tbody>
+<%c++ if (tickets.empty()) { %>
+        <tr>
+          <td colspan="6" class="py-12 text-center opacity-50">No hay tickets registrados</td>
+        </tr>
+<%c++ } else { for (const auto& t : tickets) { %>
+        <tr class="hover cursor-pointer"
+            hx-get="/ticketeer/requester/v1/ticket/<%= t.at("id") %>/details"
+            hx-target="#main-content"
+            hx-swap="innerHTML">
+          <td class="font-mono text-xs opacity-60">#<%= t.at("id") %></td>
+          <td class="max-w-xs truncate"><%= t.at("description") %></td>
+          <td class="text-sm"><%= t.at("request_type_name") %></td>
+          <td>
+            <span class="badge badge-sm badge-ghost"><%= t.at("status_name") %></span>
+          </td>
+          <td>
+            <span class="badge badge-sm badge-outline"><%= t.at("priority_name") %></span>
+          </td>
+          <td class="text-xs opacity-60"><%= t.at("created_at") %></td>
+        </tr>
+<%c++ } } %>
+      </tbody>
+    </table>
+  </div>
+</div>

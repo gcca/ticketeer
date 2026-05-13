@@ -52,9 +52,7 @@ SELECT p.id::text
     return Reject(mcb, "Forbidden: insufficient permissions",
                   drogon::k403Forbidden);
 
-  nextCb([mcb = std::move(mcb)](const drogon::HttpResponsePtr &resp) {
-    mcb(resp);
-  });
+  nextCb(std::move(mcb));
 }
 
 void RoleSupervisorRequired::Reject(const drogon::MiddlewareCallback &mcb,

@@ -1,419 +1,280 @@
 #include "routes.hpp"
 
-#include <cstring>
-#include <optional>
+#include <map>
 #include <string>
 #include <vector>
 
+#include <drogon/DrTemplateBase.h>
 #include <json/json.h>
-#include <libpq-fe.h>
 #include <quill/Frontend.h>
 #include <quill/LogMacros.h>
+#include <sqlite3.h>
 
 #include "ticketeer/core/conf.hpp"
-#include "ticketeer/handling/role/common.hpp"
 
 namespace {
 
 using Callback = std::function<void(const drogon::HttpResponsePtr &)>;
-
-enum class TicketLookupStatus { Found, NotFound, QueryFailed };
-
-struct TicketLookup {
-  TicketLookupStatus status;
-  Json::Value ticket;
-};
+using Row      = std::map<std::string, std::string>;
+using Rows     = std::vector<Row>;
 
 inline void BadRequest(const Callback &callback, const char *msg,
                        drogon::HttpStatusCode code = drogon::k400BadRequest) {
-  Json::Value error;
-  error["message"] = msg;
-  auto resp = drogon::HttpResponse::newHttpJsonResponse(error);
+  auto resp = drogon::HttpResponse::newHttpResponse();
   resp->setStatusCode(code);
+  resp->setBody(msg);
   callback(resp);
 }
 
-[[nodiscard]] inline PGconn *ConnectDB() {
-  return PQconnectdb(ticketeer::core::conf::settings.DB_URL.c_str());
+[[nodiscard]] inline sqlite3 *ConnectDB() {
+  std::string path = ticketeer::core::conf::settings.DB_URL;
+  if (path.starts_with("sqlite:")) path = path.substr(7);
+  sqlite3 *db = nullptr;
+  if (sqlite3_open(path.c_str(), &db) != SQLITE_OK) {
+    sqlite3_close(db);
+    return nullptr;
+  }
+  return db;
 }
 
-[[nodiscard]] inline std::optional<std::string>
-FetchProfileId(quill::Logger *logger, PGconn *pg, const std::string &token) {
-  const char *params[] = {token.c_str()};
-  PGresult *res = PQexecParams(pg,
-                               R"SQL(
-SELECT p.id::text
-  FROM helpdesk.profile p
-  JOIN auth.session s
-    ON s.user_id = p.user_id
- WHERE s.token = $1
-   AND s.expires_at > now()
-   AND p.role = 'requester'::helpdesk.role
-)SQL",
-                               1, nullptr, params, nullptr, nullptr, 0);
+struct Profile {
+  std::string id;
+  std::string username;
+  std::string name;
+};
 
-  const auto status = PQresultStatus(res);
-  if (status != PGRES_TUPLES_OK) {
-    LOGJ_DEBUG(logger, "[requester] user query error",
-               PQresultErrorMessage(res));
-    PQclear(res);
+[[nodiscard]] inline std::optional<Profile>
+FetchProfile(quill::Logger *logger, sqlite3 *db, const std::string &token) {
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql = R"SQL(
+SELECT p.id, u.username, p.name
+  FROM helpdesk_profile p
+  JOIN auth_session s ON s.user_id = p.user_id
+  JOIN auth_user u    ON u.id = p.user_id
+ WHERE s.token = ?
+   AND s.expires_at > datetime('now')
+   AND p.role = 'requester'
+ LIMIT 1
+)SQL";
+
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    LOGJ_DEBUG(logger, "[requester] profile query error", sqlite3_errmsg(db));
     return std::nullopt;
   }
+  sqlite3_bind_text(stmt, 1, token.c_str(), -1, SQLITE_STATIC);
 
-  if (PQntuples(res) != 1) {
-    LOGJ_DEBUG(logger, "[requester] user not found");
-    PQclear(res);
-    return std::nullopt;
-  }
+  std::optional<Profile> profile;
+  if (sqlite3_step(stmt) == SQLITE_ROW)
+    profile = Profile{
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0)),
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1)),
+        reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2))};
+  else
+    LOGJ_DEBUG(logger, "[requester] profile not found");
 
-  std::string user_id = PQgetvalue(res, 0, 0);
-  PQclear(res);
-  return user_id;
+  sqlite3_finalize(stmt);
+  return profile;
 }
 
-[[nodiscard]] inline std::optional<std::string>
-FetchDefaultStatusId(quill::Logger *logger, PGconn *pg) {
-  PGresult *status_res = PQexecParams(pg,
-                                      R"SQL(
-SELECT default_status_id::text
-  FROM helpdesk.setting
- WHERE name = 'default'
-)SQL",
-                                      0, nullptr, nullptr, nullptr, nullptr, 0);
-  if (PQresultStatus(status_res) != PGRES_TUPLES_OK ||
-      PQntuples(status_res) != 1) {
-    LOGJ_DEBUG(logger, "[requester] default status query error",
-               PQresultErrorMessage(status_res));
-    PQclear(status_res);
-    return std::nullopt;
+[[nodiscard]] inline Rows
+FetchTickets(quill::Logger *logger, sqlite3 *db,
+             const std::string &profile_id, const std::string &search) {
+  sqlite3_stmt *stmt = nullptr;
+  std::string sql = R"SQL(
+SELECT t.id, t.description, ts.display_name, p.display_name, rt.name, t.created_at
+  FROM helpdesk_ticket t
+  JOIN helpdesk_ticket_status ts ON ts.id = t.status_id
+  JOIN helpdesk_priority p       ON p.id  = t.priority_id
+  JOIN helpdesk_request_type rt  ON rt.id = t.request_type_id
+ WHERE t.requester_id = ?
+)SQL";
+  if (!search.empty()) sql += " AND t.description LIKE ?";
+  sql += " ORDER BY t.created_at DESC";
+
+  if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+    LOGJ_DEBUG(logger, "[requester] ticket list query error", sqlite3_errmsg(db));
+    return {};
+  }
+  sqlite3_bind_text(stmt, 1, profile_id.c_str(), -1, SQLITE_STATIC);
+  std::string like_search;
+  if (!search.empty()) {
+    like_search = "%" + search + "%";
+    sqlite3_bind_text(stmt, 2, like_search.c_str(), -1, SQLITE_STATIC);
   }
 
-  std::string default_status_id = PQgetvalue(status_res, 0, 0);
-  PQclear(status_res);
-  return default_status_id;
+  Rows tickets;
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    auto col = [&](int i) -> std::string {
+      const auto *v = sqlite3_column_text(stmt, i);
+      return v ? reinterpret_cast<const char *>(v) : "";
+    };
+    tickets.push_back({{"id", col(0)}, {"description", col(1)},
+                       {"status_name", col(2)}, {"priority_name", col(3)},
+                       {"request_type_name", col(4)}, {"created_at", col(5)}});
+  }
+  sqlite3_finalize(stmt);
+  return tickets;
 }
 
-[[nodiscard]] inline std::optional<std::string>
-FetchDefaultAssignedToId(quill::Logger *logger, PGconn *pg) {
-  PGresult *res = PQexecParams(pg,
-                               R"SQL(
-SELECT default_assigned_to_id::text
-  FROM helpdesk.setting
- WHERE name = 'default'
-)SQL",
-                               0, nullptr, nullptr, nullptr, nullptr, 0);
-  if (PQresultStatus(res) != PGRES_TUPLES_OK || PQntuples(res) != 1) {
-    LOGJ_DEBUG(logger, "[requester] default assigned to query error",
-               PQresultErrorMessage(res));
-    PQclear(res);
+[[nodiscard]] inline std::optional<Row>
+FetchTicketDetails(quill::Logger *logger, sqlite3 *db,
+                   const std::string &ticket_id,
+                   const std::string &profile_id) {
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql = R"SQL(
+SELECT t.id, t.description, ts.display_name, p.display_name,
+       rt.name, d.name, t.created_at, t.due_date,
+       COALESCE(ap.name, '') AS assigned_to_name
+  FROM helpdesk_ticket t
+  JOIN helpdesk_ticket_status ts ON ts.id = t.status_id
+  JOIN helpdesk_priority p       ON p.id  = t.priority_id
+  JOIN helpdesk_request_type rt  ON rt.id = t.request_type_id
+  JOIN helpdesk_department d     ON d.id  = t.department_id
+  LEFT JOIN helpdesk_profile ap  ON ap.id = t.assigned_to_id
+ WHERE t.id = ?
+   AND t.requester_id = ?
+ LIMIT 1
+)SQL";
+
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    LOGJ_DEBUG(logger, "[requester] ticket details query error", sqlite3_errmsg(db));
     return std::nullopt;
   }
+  sqlite3_bind_text(stmt, 1, ticket_id.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, profile_id.c_str(), -1, SQLITE_STATIC);
 
-  std::string default_assigned_to_id = PQgetvalue(res, 0, 0);
-  PQclear(res);
-  return default_assigned_to_id;
-}
-
-[[nodiscard]] inline std::optional<Json::Value>
-CreateTicket(quill::Logger *logger, PGconn *pg, const std::string &profile_id,
-             const Json::Value &request_type_id,
-             const Json::Value &department_id, const Json::Value &priority_id,
-             const std::string &default_status_id,
-             const std::string &default_assigned_to_id,
-             const Json::Value &description, const Json::Value &due_date) {
-  std::string request_type_str = request_type_id.asString();
-  std::string department_str = department_id.asString();
-  std::string priority_str = priority_id.asString();
-  std::string description_str = description.asString();
-  std::string due_date_str = due_date.isString() ? due_date.asString() : "";
-
-  std::vector<const char *> params = {
-      request_type_str.c_str(),  profile_id.c_str(),
-      department_str.c_str(),    priority_str.c_str(),
-      default_status_id.c_str(), default_assigned_to_id.c_str(),
-      description_str.c_str()};
-  std::string query =
-      "INSERT INTO helpdesk.ticket (request_type_id, requester_id, "
-      "department_id, priority_id, status_id, assigned_to_id, description";
-  if (!due_date_str.empty()) {
-    query += ", due_date";
-    params.push_back(due_date_str.c_str());
+  std::optional<Row> ticket;
+  if (sqlite3_step(stmt) == SQLITE_ROW) {
+    auto col = [&](int i) -> std::string {
+      const auto *v = sqlite3_column_text(stmt, i);
+      return v ? reinterpret_cast<const char *>(v) : "";
+    };
+    ticket = Row{{"id", col(0)}, {"description", col(1)},
+                 {"status_name", col(2)}, {"priority_name", col(3)},
+                 {"request_type_name", col(4)}, {"department_name", col(5)},
+                 {"created_at", col(6)}, {"due_date", col(7)},
+                 {"assigned_to_name", col(8)}};
   }
-  query += ") VALUES ($1::bigint, $2::bigint, $3::bigint, $4::bigint, "
-           "$5::bigint, $6::bigint, $7";
-  if (!due_date_str.empty()) {
-    query += ", $8";
-  }
-  query += ") RETURNING id::text, description, created_at::text";
-
-  PGresult *insert_res =
-      PQexecParams(pg, query.c_str(), static_cast<int>(params.size()), nullptr,
-                   params.data(), nullptr, nullptr, 0);
-  if (PQresultStatus(insert_res) != PGRES_TUPLES_OK ||
-      PQntuples(insert_res) != 1) {
-    LOGJ_DEBUG(logger, "[requester] insert ticket error",
-               PQresultErrorMessage(insert_res));
-    PQclear(insert_res);
-    return std::nullopt;
-  }
-
-  Json::Value ticket;
-  ticket["id"] = PQgetvalue(insert_res, 0, 0);
-  ticket["description"] = PQgetvalue(insert_res, 0, 1);
-  ticket["created_at"] = PQgetvalue(insert_res, 0, 2);
-  PQclear(insert_res);
+  sqlite3_finalize(stmt);
   return ticket;
 }
 
-[[nodiscard]] inline TicketLookup
-FetchTicketDetails(quill::Logger *logger, PGconn *pg,
-                   const std::string &ticket_id,
-                   const std::string &profile_id) {
-  const char *params[] = {ticket_id.c_str(), profile_id.c_str()};
-  PGresult *res = PQexecParams(pg,
-                               R"SQL(
-SELECT t.id::text,
-       t.request_type_id::text,
-       t.requester_id::text,
-       t.assigned_to_id::text,
-       t.department_id::text,
-       t.priority_id::text,
-       t.status_id::text,
-       t.description,
-       t.due_date::text,
-       t.created_at::text,
-       d.name AS department_name,
-       p.display_name AS priority_name,
-       ts.display_name AS status_name,
-       rt.name AS request_type_name,
-       rt.description AS request_type_description,
-       pr.username AS requester_username,
-       prf.name AS requester_name,
-       ap.name AS assigned_to_name,
-       au.username AS assigned_to_username,
-       au.id::text AS assigned_to_user_id
-  FROM helpdesk.ticket t
-  JOIN helpdesk.department d
-    ON d.id = t.department_id
-  JOIN helpdesk.priority p
-    ON p.id = t.priority_id
-  JOIN helpdesk.ticket_status ts
-    ON ts.id = t.status_id
-  JOIN helpdesk.request_type rt
-    ON rt.id = t.request_type_id
-  JOIN helpdesk.profile prf
-    ON prf.id = t.requester_id
-  JOIN auth."user" pr
-    ON pr.id = prf.user_id
-  LEFT JOIN helpdesk.profile ap
-    ON ap.id = t.assigned_to_id
-  LEFT JOIN auth."user" au
-    ON au.id = ap.user_id
- WHERE t.id = $1::bigint
-   AND t.requester_id = $2::bigint
-)SQL",
-                               2, nullptr, params, nullptr, nullptr, 0);
+[[nodiscard]] inline Rows
+FetchActivities(quill::Logger *logger, sqlite3 *db,
+                const std::string &ticket_id) {
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql = R"SQL(
+SELECT ta.id, ta.body, ta.created_at, p.name
+  FROM helpdesk_ticket_activity ta
+  JOIN helpdesk_profile p ON p.id = ta.profile_id
+ WHERE ta.ticket_id = ?
+ ORDER BY ta.created_at ASC, ta.id ASC
+)SQL";
 
-  if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-    LOGJ_DEBUG(logger, "[requester] ticket details query error",
-               PQresultErrorMessage(res));
-    PQclear(res);
-    return {TicketLookupStatus::QueryFailed, Json::Value{}};
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    LOGJ_DEBUG(logger, "[requester] activities query error", sqlite3_errmsg(db));
+    return {};
   }
+  sqlite3_bind_text(stmt, 1, ticket_id.c_str(), -1, SQLITE_STATIC);
 
-  if (PQntuples(res) != 1) {
-    PQclear(res);
-    return {TicketLookupStatus::NotFound, Json::Value{}};
+  Rows activities;
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    auto col = [&](int i) -> std::string {
+      const auto *v = sqlite3_column_text(stmt, i);
+      return v ? reinterpret_cast<const char *>(v) : "";
+    };
+    activities.push_back({{"id", col(0)}, {"body", col(1)},
+                          {"created_at", col(2)}, {"profile_name", col(3)}});
   }
-
-  Json::Value ticket;
-  ticket["id"] = PQgetvalue(res, 0, 0);
-  const char *assigned_to_id = PQgetvalue(res, 0, 3);
-  if (assigned_to_id && strlen(assigned_to_id) > 0) {
-    ticket["assigned_to"]["id"] = assigned_to_id;
-    ticket["assigned_to"]["name"] = PQgetvalue(res, 0, 17);
-    ticket["assigned_to"]["user"]["id"] = PQgetvalue(res, 0, 19);
-    ticket["assigned_to"]["user"]["username"] = PQgetvalue(res, 0, 18);
-  }
-  ticket["description"] = PQgetvalue(res, 0, 7);
-  const char *due_date = PQgetvalue(res, 0, 8);
-  if (due_date && strlen(due_date) > 0) {
-    ticket["due_date"] = due_date;
-  }
-  ticket["created_at"] = PQgetvalue(res, 0, 9);
-  ticket["department"]["id"] = PQgetvalue(res, 0, 4);
-  ticket["department"]["name"] = PQgetvalue(res, 0, 10);
-  ticket["priority"]["id"] = PQgetvalue(res, 0, 5);
-  ticket["priority"]["display_name"] = PQgetvalue(res, 0, 11);
-  ticket["status"]["id"] = PQgetvalue(res, 0, 6);
-  ticket["status"]["display_name"] = PQgetvalue(res, 0, 12);
-  ticket["request_type"]["id"] = PQgetvalue(res, 0, 1);
-  ticket["request_type"]["name"] = PQgetvalue(res, 0, 13);
-  ticket["request_type"]["description"] = PQgetvalue(res, 0, 14);
-  ticket["requester"]["name"] = PQgetvalue(res, 0, 16);
-  ticket["requester"]["user"]["id"] = PQgetvalue(res, 0, 2);
-  ticket["requester"]["user"]["username"] = PQgetvalue(res, 0, 15);
-
-  PQclear(res);
-  return {TicketLookupStatus::Found, ticket};
+  sqlite3_finalize(stmt);
+  return activities;
 }
 
-[[nodiscard]] inline TicketLookup
-FetchTicketActivityList(quill::Logger *logger, PGconn *pg,
-                        const std::string &ticket_id,
-                        const std::string &profile_id) {
-  const char *ticket_params[] = {ticket_id.c_str(), profile_id.c_str()};
-  PGresult *ticket_res =
-      PQexecParams(pg,
-                   R"SQL(
-SELECT id::text
-  FROM helpdesk.ticket
- WHERE id = $1::bigint
-   AND requester_id = $2::bigint
-)SQL",
-                   2, nullptr, ticket_params, nullptr, nullptr, 0);
-
-  if (PQresultStatus(ticket_res) != PGRES_TUPLES_OK) {
-    LOGJ_DEBUG(logger, "[requester] ticket activity owner query error",
-               PQresultErrorMessage(ticket_res));
-    PQclear(ticket_res);
-    return {TicketLookupStatus::QueryFailed, Json::Value{}};
-  }
-
-  if (PQntuples(ticket_res) != 1) {
-    PQclear(ticket_res);
-    return {TicketLookupStatus::NotFound, Json::Value{}};
-  }
-  PQclear(ticket_res);
-
-  const char *activity_params[] = {ticket_id.c_str()};
-  PGresult *activities =
-      PQexecParams(pg,
-                   R"SQL(
-SELECT ta.id::text,
-       ta.kind::text,
-       ta.body,
-       ta.created_at::text,
-       p.name AS profile_name
-  FROM helpdesk.ticket_activity ta
-  JOIN helpdesk.profile p
-    ON p.id = ta.profile_id
- WHERE ta.ticket_id = $1::bigint
- ORDER BY ta.created_at DESC,
-          ta.id DESC
-)SQL",
-                   1, nullptr, activity_params, nullptr, nullptr, 0);
-
-  if (PQresultStatus(activities) != PGRES_TUPLES_OK) {
-    LOGJ_DEBUG(logger, "[requester] ticket activity list query error",
-               PQresultErrorMessage(activities));
-    PQclear(activities);
-    return {TicketLookupStatus::QueryFailed, Json::Value{}};
-  }
-
-  Json::Value result = Json::arrayValue;
-  for (int i = 0; i < PQntuples(activities); ++i) {
-    Json::Value activity;
-    activity["id"] = PQgetvalue(activities, i, 0);
-    activity["kind"] = PQgetvalue(activities, i, 1);
-    activity["body"] = PQgetvalue(activities, i, 2);
-    activity["created_at"] = PQgetvalue(activities, i, 3);
-    activity["profile_name"] = PQgetvalue(activities, i, 4);
-    result.append(activity);
-  }
-  PQclear(activities);
-
-  return {TicketLookupStatus::Found, result};
-}
-
-[[nodiscard]] inline std::optional<Json::Value> CreateTicketActivityMessage(
-    quill::Logger *logger, PGconn *pg, const std::string &ticket_id,
-    const std::string &profile_id, const std::string &message) {
-  const char *params[] = {ticket_id.c_str(), profile_id.c_str(),
-                          message.c_str()};
-  PGresult *insert_res = PQexecParams(pg,
-                                      R"SQL(
-INSERT INTO helpdesk.ticket_activity (ticket_id, profile_id, kind, body)
-VALUES ($1::bigint, $2::bigint, 'message', $3)
-RETURNING id::text, kind::text, body, created_at::text,
-         (SELECT name FROM helpdesk.profile WHERE id = $2::bigint) AS profile_name
-      )SQL",
-                                      3, nullptr, params, nullptr, nullptr, 0);
-
-  if (PQresultStatus(insert_res) != PGRES_TUPLES_OK ||
-      PQntuples(insert_res) != 1) {
-    LOGJ_DEBUG(logger, "[requester] insert activity error",
-               PQresultErrorMessage(insert_res));
-    PQclear(insert_res);
+[[nodiscard]] inline std::optional<std::string>
+FetchDefaultStatusId(quill::Logger *logger, sqlite3 *db) {
+  sqlite3_stmt *stmt = nullptr;
+  if (sqlite3_prepare_v2(db,
+          "SELECT default_status_id FROM helpdesk_setting WHERE name = 'default'",
+          -1, &stmt, nullptr) != SQLITE_OK) {
+    LOGJ_DEBUG(logger, "[requester] default status query error", sqlite3_errmsg(db));
     return std::nullopt;
   }
+  std::optional<std::string> id;
+  if (sqlite3_step(stmt) == SQLITE_ROW)
+    id = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+  sqlite3_finalize(stmt);
+  return id;
+}
 
-  Json::Value activity;
-  activity["id"] = PQgetvalue(insert_res, 0, 0);
-  activity["kind"] = PQgetvalue(insert_res, 0, 1);
-  activity["body"] = PQgetvalue(insert_res, 0, 2);
-  activity["created_at"] = PQgetvalue(insert_res, 0, 3);
-  activity["profile_name"] = PQgetvalue(insert_res, 0, 4);
-  PQclear(insert_res);
-  return activity;
+[[nodiscard]] inline std::optional<std::string>
+FetchDefaultAssignedToId(quill::Logger *logger, sqlite3 *db) {
+  sqlite3_stmt *stmt = nullptr;
+  if (sqlite3_prepare_v2(db,
+          "SELECT default_assigned_to_id FROM helpdesk_setting WHERE name = 'default'",
+          -1, &stmt, nullptr) != SQLITE_OK) {
+    LOGJ_DEBUG(logger, "[requester] default assigned_to query error", sqlite3_errmsg(db));
+    return std::nullopt;
+  }
+  std::optional<std::string> id;
+  if (sqlite3_step(stmt) == SQLITE_ROW)
+    id = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+  sqlite3_finalize(stmt);
+  return id;
 }
 
 } // namespace
 
-namespace ticketeer::handling::role {
+namespace ticketeer {
 
-void Requester::TicketList(
-    const drogon::HttpRequestPtr &req,
-    std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
+void Requester::TicketList(const drogon::HttpRequestPtr &req,
+                           Callback &&callback) {
   auto *logger = quill::Frontend::get_logger("root");
-  const auto auth_header = req->getHeader("Authorization");
-  if (auth_header.empty() || auth_header.rfind("Bearer ", 0) != 0)
-    return BadRequest(callback, "Missing Authorization");
+  const auto token = req->getCookie("token");
 
-  const std::string token = auth_header.substr(7);
-
-  PGconn *pg = ConnectDB();
-  if (PQstatus(pg) != CONNECTION_OK) {
-    PQfinish(pg);
+  sqlite3 *db = ConnectDB();
+  if (!db)
     return BadRequest(callback, "Database unavailable",
                       drogon::k503ServiceUnavailable);
+
+  const auto profile = FetchProfile(logger, db, token);
+  if (!profile) {
+    sqlite3_close(db);
+    return callback(drogon::HttpResponse::newRedirectionResponse("/ticketeer/auth/signin"));
   }
 
-  auto profile_id = FetchProfileId(logger, pg, token);
-  if (!profile_id) {
-    PQfinish(pg);
-    return BadRequest(callback, "Forbidden: insufficient permissions",
-                      drogon::k403Forbidden);
+  const bool is_htmx = !req->getHeader("HX-Request").empty();
+  if (!is_htmx) {
+    sqlite3_close(db);
+    drogon::HttpViewData data;
+    data.insert("username", profile->username);
+    data.insert("name", profile->name);
+    return callback(drogon::HttpResponse::newHttpViewResponse("requester_index", data));
   }
 
-  const std::string search = req->getParameter("s");
-  Json::Value tickets = ticketeer::api::role::common::FetchRequesterTicketList(
-      logger, pg, *profile_id,
-      search.empty() ? std::nullopt : std::optional<std::string>{search});
-  PQfinish(pg);
+  const auto search = req->getParameter("s");
+  auto tickets = FetchTickets(logger, db, profile->id, search);
+  sqlite3_close(db);
 
-  callback(drogon::HttpResponse::newHttpJsonResponse(tickets));
+  drogon::HttpViewData data;
+  data.insert("tickets", tickets);
+  data.insert("search", search);
+  callback(drogon::HttpResponse::newHttpViewResponse("requester_ticket_list", data));
 }
 
-void Requester::TicketCreate(
-    const drogon::HttpRequestPtr &req,
-    std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
+void Requester::TicketCreate(const drogon::HttpRequestPtr &req,
+                             Callback &&callback) {
   auto *logger = quill::Frontend::get_logger("root");
-  const auto auth_header = req->getHeader("Authorization");
-  if (auth_header.empty() || auth_header.rfind("Bearer ", 0) != 0)
-    return BadRequest(callback, "Missing Authorization");
+  const auto token = req->getCookie("token");
 
-  const std::string token = auth_header.substr(7);
-
-  auto body = req->getJsonObject();
+  const auto body = req->getJsonObject();
   if (!body)
     return BadRequest(callback, "Invalid JSON body");
 
   const auto &request_type_id = (*body)["request_type_id"];
-  const auto &department_id = (*body)["department_id"];
-  const auto &priority_id = (*body)["priority_id"];
-  const auto &description = (*body)["description"];
-  const auto &due_date = (*body)["due_date"];
+  const auto &department_id   = (*body)["department_id"];
+  const auto &priority_id     = (*body)["priority_id"];
+  const auto &description     = (*body)["description"];
+  const auto &due_date        = (*body)["due_date"];
 
   if (!request_type_id.isString() || !department_id.isString() ||
       !priority_id.isString() || !description.isString())
@@ -421,207 +282,192 @@ void Requester::TicketCreate(
                       "Missing or invalid required fields: request_type_id, "
                       "department_id, priority_id, description");
 
-  PGconn *pg = ConnectDB();
-  if (PQstatus(pg) != CONNECTION_OK) {
-    PQfinish(pg);
+  sqlite3 *db = ConnectDB();
+  if (!db)
     return BadRequest(callback, "Database unavailable",
                       drogon::k503ServiceUnavailable);
+
+  const auto profile = FetchProfile(logger, db, token);
+  if (!profile) {
+    sqlite3_close(db);
+    return BadRequest(callback, "Invalid or expired token", drogon::k401Unauthorized);
   }
 
-  auto profile_id = FetchProfileId(logger, pg, token);
-  if (!profile_id) {
-    PQfinish(pg);
-    return BadRequest(callback, "Invalid or expired token",
-                      drogon::k401Unauthorized);
-  }
-
-  auto default_status_id = FetchDefaultStatusId(logger, pg);
+  const auto default_status_id = FetchDefaultStatusId(logger, db);
   if (!default_status_id) {
-    PQfinish(pg);
+    sqlite3_close(db);
     return BadRequest(callback, "Failed to get default status");
   }
 
-  auto default_assigned_to_id = FetchDefaultAssignedToId(logger, pg);
+  const auto default_assigned_to_id = FetchDefaultAssignedToId(logger, db);
   if (!default_assigned_to_id) {
-    PQfinish(pg);
+    sqlite3_close(db);
     return BadRequest(callback, "Failed to get default assigned to");
   }
 
-  auto ticket = CreateTicket(logger, pg, *profile_id, request_type_id,
-                             department_id, priority_id, *default_status_id,
-                             *default_assigned_to_id, description, due_date);
-  if (!ticket) {
-    PQfinish(pg);
+  sqlite3_stmt *stmt = nullptr;
+  std::string sql =
+      "INSERT INTO helpdesk_ticket "
+      "(request_type_id, requester_id, department_id, priority_id, "
+      "status_id, assigned_to_id, description";
+  const std::string due = due_date.isString() ? due_date.asString() : "";
+  if (!due.empty()) sql += ", due_date";
+  sql += ") VALUES (?, ?, ?, ?, ?, ?, ?";
+  if (!due.empty()) sql += ", ?";
+  sql += ")";
+
+  if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+    LOGJ_DEBUG(logger, "[requester] insert ticket error", sqlite3_errmsg(db));
+    sqlite3_close(db);
     return BadRequest(callback, "Failed to create ticket");
   }
 
-  PQfinish(pg);
+  const auto rt  = request_type_id.asString();
+  const auto dep = department_id.asString();
+  const auto pri = priority_id.asString();
+  const auto des = description.asString();
+  sqlite3_bind_text(stmt, 1, rt.c_str(),                          -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, profile->id.c_str(),                 -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 3, dep.c_str(),                         -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 4, pri.c_str(),                         -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 5, default_status_id->c_str(),          -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 6, default_assigned_to_id->c_str(),     -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 7, des.c_str(),                         -1, SQLITE_STATIC);
+  if (!due.empty())
+    sqlite3_bind_text(stmt, 8, due.c_str(), -1, SQLITE_STATIC);
 
-  callback(drogon::HttpResponse::newHttpJsonResponse(*ticket));
+  if (sqlite3_step(stmt) != SQLITE_DONE) {
+    LOGJ_DEBUG(logger, "[requester] insert ticket step error", sqlite3_errmsg(db));
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return BadRequest(callback, "Failed to create ticket");
+  }
+  sqlite3_finalize(stmt);
+
+  auto tickets = FetchTickets(logger, db, profile->id, "");
+  sqlite3_close(db);
+
+  drogon::HttpViewData data;
+  data.insert("tickets", tickets);
+  data.insert("search", std::string(""));
+  callback(drogon::HttpResponse::newHttpViewResponse("requester_ticket_list", data));
 }
 
-void Requester::TicketDetails(
-    const drogon::HttpRequestPtr &req,
-    std::function<void(const drogon::HttpResponsePtr &)> &&callback,
-    const std::string &ticket_id) {
+void Requester::TicketDetails(const drogon::HttpRequestPtr &req,
+                              Callback &&callback,
+                              const std::string &ticket_id) {
   auto *logger = quill::Frontend::get_logger("root");
-  const auto auth_header = req->getHeader("Authorization");
-  if (auth_header.empty() || auth_header.rfind("Bearer ", 0) != 0)
-    return BadRequest(callback, "Missing Authorization");
+  const auto token = req->getCookie("token");
 
-  PGconn *pg = ConnectDB();
-  if (PQstatus(pg) != CONNECTION_OK) {
-    PQfinish(pg);
+  sqlite3 *db = ConnectDB();
+  if (!db)
     return BadRequest(callback, "Database unavailable",
                       drogon::k503ServiceUnavailable);
+
+  const auto profile = FetchProfile(logger, db, token);
+  if (!profile) {
+    sqlite3_close(db);
+    return BadRequest(callback, "Forbidden", drogon::k403Forbidden);
   }
 
-  const std::string token = auth_header.substr(7);
-  auto profile_id = FetchProfileId(logger, pg, token);
-  if (!profile_id) {
-    PQfinish(pg);
-    return BadRequest(callback, "Forbidden: insufficient permissions",
-                      drogon::k403Forbidden);
-  }
-
-  auto ticket = FetchTicketDetails(logger, pg, ticket_id, *profile_id);
-  if (ticket.status == TicketLookupStatus::QueryFailed) {
-    PQfinish(pg);
-    return BadRequest(callback, "Database query failed");
-  }
-
-  if (ticket.status == TicketLookupStatus::NotFound) {
-    PQfinish(pg);
+  const auto ticket = FetchTicketDetails(logger, db, ticket_id, profile->id);
+  if (!ticket) {
+    sqlite3_close(db);
     return BadRequest(callback, "Ticket not found", drogon::k404NotFound);
   }
 
-  auto activities = FetchTicketActivityList(logger, pg, ticket_id, *profile_id);
-  if (activities.status == TicketLookupStatus::QueryFailed) {
-    PQfinish(pg);
-    return BadRequest(callback, "Database query failed");
-  }
+  auto activities = FetchActivities(logger, db, ticket_id);
+  sqlite3_close(db);
 
-  if (activities.status == TicketLookupStatus::NotFound) {
-    PQfinish(pg);
-    return BadRequest(callback, "Ticket not found", drogon::k404NotFound);
-  }
-
-  ticket.ticket["activities"] = activities.ticket;
-
-  PQfinish(pg);
-  callback(drogon::HttpResponse::newHttpJsonResponse(ticket.ticket));
+  drogon::HttpViewData data;
+  data.insert("ticket", *ticket);
+  data.insert("activities", activities);
+  callback(drogon::HttpResponse::newHttpViewResponse("requester_ticket_details", data));
 }
 
-void Requester::TicketActivityList(
-    const drogon::HttpRequestPtr &req,
-    std::function<void(const drogon::HttpResponsePtr &)> &&callback,
-    const std::string &ticket_id) {
+void Requester::TicketActivityList(const drogon::HttpRequestPtr &req,
+                                   Callback &&callback,
+                                   const std::string &ticket_id) {
   auto *logger = quill::Frontend::get_logger("root");
-  const auto auth_header = req->getHeader("Authorization");
-  if (auth_header.empty() || auth_header.rfind("Bearer ", 0) != 0)
-    return BadRequest(callback, "Missing Authorization");
+  const auto token = req->getCookie("token");
 
-  PGconn *pg = ConnectDB();
-  if (PQstatus(pg) != CONNECTION_OK) {
-    PQfinish(pg);
+  sqlite3 *db = ConnectDB();
+  if (!db)
     return BadRequest(callback, "Database unavailable",
                       drogon::k503ServiceUnavailable);
+
+  const auto profile = FetchProfile(logger, db, token);
+  if (!profile) {
+    sqlite3_close(db);
+    return BadRequest(callback, "Forbidden", drogon::k403Forbidden);
   }
 
-  const std::string token = auth_header.substr(7);
-  auto profile_id = FetchProfileId(logger, pg, token);
-  if (!profile_id) {
-    PQfinish(pg);
-    return BadRequest(callback, "Forbidden: insufficient permissions",
-                      drogon::k403Forbidden);
-  }
+  auto activities = FetchActivities(logger, db, ticket_id);
+  sqlite3_close(db);
 
-  auto activities = FetchTicketActivityList(logger, pg, ticket_id, *profile_id);
-  if (activities.status == TicketLookupStatus::QueryFailed) {
-    PQfinish(pg);
-    return BadRequest(callback, "Database query failed");
-  }
-
-  if (activities.status == TicketLookupStatus::NotFound) {
-    PQfinish(pg);
-    return BadRequest(callback, "Ticket not found", drogon::k404NotFound);
-  }
-
-  PQfinish(pg);
-  callback(drogon::HttpResponse::newHttpJsonResponse(activities.ticket));
+  drogon::HttpViewData data;
+  data.insert("activities", activities);
+  callback(drogon::HttpResponse::newHttpViewResponse("requester_ticket_details", data));
 }
 
-void Requester::TicketActivityCreateMessage(
-    const drogon::HttpRequestPtr &req,
-    std::function<void(const drogon::HttpResponsePtr &)> &&callback,
-    const std::string &ticket_id) {
+void Requester::TicketActivityCreateMessage(const drogon::HttpRequestPtr &req,
+                                            Callback &&callback,
+                                            const std::string &ticket_id) {
   auto *logger = quill::Frontend::get_logger("root");
-  const auto auth_header = req->getHeader("Authorization");
-  if (auth_header.empty() || auth_header.rfind("Bearer ", 0) != 0)
-    return BadRequest(callback, "Missing Authorization");
+  const auto token = req->getCookie("token");
 
-  const std::string token = auth_header.substr(7);
+  const auto message = req->getParameter("message");
+  if (message.empty())
+    return BadRequest(callback, "Missing field: message");
 
-  auto body = req->getJsonObject();
-  if (!body)
-    return BadRequest(callback, "Invalid JSON body");
-
-  const auto &message = (*body)["message"];
-  if (!message.isString())
-    return BadRequest(callback, "Missing or invalid field: message");
-
-  PGconn *pg = ConnectDB();
-  if (PQstatus(pg) != CONNECTION_OK) {
-    PQfinish(pg);
+  sqlite3 *db = ConnectDB();
+  if (!db)
     return BadRequest(callback, "Database unavailable",
                       drogon::k503ServiceUnavailable);
+
+  const auto profile = FetchProfile(logger, db, token);
+  if (!profile) {
+    sqlite3_close(db);
+    return BadRequest(callback, "Invalid or expired token", drogon::k401Unauthorized);
   }
 
-  auto profile_id = FetchProfileId(logger, pg, token);
-  if (!profile_id) {
-    PQfinish(pg);
-    return BadRequest(callback, "Invalid or expired token",
-                      drogon::k401Unauthorized);
-  }
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql = R"SQL(
+INSERT INTO helpdesk_ticket_activity (ticket_id, profile_id, kind, body)
+SELECT ?, p.id, 'message', ?
+  FROM helpdesk_ticket t
+  JOIN helpdesk_profile p ON p.id = ?
+ WHERE t.id = ?
+   AND t.requester_id = p.id
+)SQL";
 
-  // Check ticket ownership
-  const char *ticket_params[] = {ticket_id.c_str(), profile_id->c_str()};
-  PGresult *ticket_res =
-      PQexecParams(pg,
-                   R"SQL(
-SELECT id::text
-  FROM helpdesk.ticket
- WHERE id = $1::bigint
-   AND requester_id = $2::bigint
-      )SQL",
-                   2, nullptr, ticket_params, nullptr, nullptr, 0);
-
-  if (PQresultStatus(ticket_res) != PGRES_TUPLES_OK) {
-    LOGJ_DEBUG(logger, "[requester] ticket owner query error",
-               PQresultErrorMessage(ticket_res));
-    PQclear(ticket_res);
-    PQfinish(pg);
-    return BadRequest(callback, "Database query failed");
-  }
-
-  if (PQntuples(ticket_res) != 1) {
-    PQclear(ticket_res);
-    PQfinish(pg);
-    return BadRequest(callback, "Ticket not found", drogon::k404NotFound);
-  }
-  PQclear(ticket_res);
-
-  // Create activity
-  auto activity = CreateTicketActivityMessage(logger, pg, ticket_id,
-                                              *profile_id, message.asString());
-  if (!activity) {
-    PQfinish(pg);
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    LOGJ_DEBUG(logger, "[requester] insert activity error", sqlite3_errmsg(db));
+    sqlite3_close(db);
     return BadRequest(callback, "Failed to create activity");
   }
+  sqlite3_bind_text(stmt, 1, ticket_id.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, message.c_str(),   -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 3, profile->id.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 4, ticket_id.c_str(), -1, SQLITE_STATIC);
 
-  PQfinish(pg);
+  if (sqlite3_step(stmt) != SQLITE_DONE || sqlite3_changes(db) != 1) {
+    LOGJ_DEBUG(logger, "[requester] insert activity step error", sqlite3_errmsg(db));
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+    return BadRequest(callback, "Failed to create activity");
+  }
+  sqlite3_finalize(stmt);
 
-  callback(drogon::HttpResponse::newHttpJsonResponse(*activity));
+  const auto last_id = std::to_string(sqlite3_last_insert_rowid(db));
+  sqlite3_close(db);
+
+  Row activity{{"id", last_id}, {"body", message},
+               {"created_at", "ahora"}, {"profile_name", profile->name}};
+
+  drogon::HttpViewData data;
+  data.insert("activity", activity);
+  callback(drogon::HttpResponse::newHttpViewResponse("requester_ticket_activity_message", data));
 }
 
-} // namespace ticketeer::handling::role
+} // namespace ticketeer

@@ -34,9 +34,7 @@ void LogInRequired::invoke(const drogon::HttpRequestPtr &req,
   if (!username)
     return mcb(drogon::HttpResponse::newRedirectionResponse("/ticketeer/auth/signin"));
 
-  nextCb([mcb = std::move(mcb)](const drogon::HttpResponsePtr &resp) {
-    mcb(resp);
-  });
+  nextCb(std::move(mcb));
 }
 
 void LogInRequired::Reject(const drogon::MiddlewareCallback &mcb,

@@ -17,7 +17,12 @@ add_executable(
   src/ticketeer/handling/auth/pbkdf2.cpp
   src/ticketeer/handling/auth/routes.cpp
   src/ticketeer/handling/dashboard/routes.cpp
-  src/ticketeer/handling/role/requester/middlewares.cpp)
+  src/ticketeer/handling/role/requester/middlewares.cpp
+  src/ticketeer/handling/role/requester/routes.cpp)
+
+drogon_create_views(ticketeer
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/ticketeer/handling/role/requester/template
+  ${CMAKE_CURRENT_BINARY_DIR})
 
 drogon_create_views(ticketeer
   ${CMAKE_CURRENT_SOURCE_DIR}/src/ticketeer/handling/auth/template

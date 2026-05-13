@@ -1,0 +1,101 @@
+<%c++
+  using Row = std::map<std::string, std::string>;
+  auto& ticket = std::any_cast<Row&>(@@["ticket"]);
+  auto& activities = std::any_cast<std::vector<Row>&>(@@["activities"]);
+%>
+<div>
+  <div class="mb-6 flex items-center gap-3">
+    <button class="btn btn-ghost btn-sm"
+            hx-get="/ticketeer/requester/v1/ticket/list"
+            hx-target="#main-content"
+            hx-swap="innerHTML">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+      </svg>
+      Volver
+    </button>
+    <h1 class="text-2xl font-bold">Ticket #<%= ticket.at("id") %></h1>
+    <span class="badge badge-ghost"><%= ticket.at("status_name") %></span>
+    <span class="badge badge-outline"><%= ticket.at("priority_name") %></span>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-3">
+    <div class="lg:col-span-2 space-y-6">
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h2 class="card-title text-base">Descripción</h2>
+          <p class="text-sm leading-relaxed"><%= ticket.at("description") %></p>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 shadow">
+        <div class="card-body gap-4">
+          <h2 class="card-title text-base">Actividad</h2>
+          <div id="activities" class="space-y-3">
+<%c++ for (const auto& a : activities) { %>
+            <div class="flex gap-3">
+              <div class="avatar placeholder flex-shrink-0">
+                <div class="w-8 rounded-full bg-base-300 text-base-content">
+                  <span class="text-xs"><%= a.at("profile_name").size() >= 2 ? a.at("profile_name").substr(0,2) : "??" %></span>
+                </div>
+              </div>
+              <div class="flex-1">
+                <div class="flex items-baseline gap-2">
+                  <span class="text-sm font-semibold"><%= a.at("profile_name") %></span>
+                  <span class="text-xs opacity-50"><%= a.at("created_at") %></span>
+                </div>
+                <p class="text-sm opacity-80 mt-0.5"><%= a.at("body") %></p>
+              </div>
+            </div>
+<%c++ } %>
+          </div>
+
+          <form hx-post="/ticketeer/requester/v1/ticket/<%= ticket.at("id") %>/activity/create/message"
+                hx-target="#activities"
+                hx-swap="beforeend"
+                hx-on::after-request="this.reset()"
+                class="flex gap-2 pt-2 border-t border-base-300">
+            <input type="text"
+                   name="message"
+                   placeholder="Escribe un mensaje..."
+                   class="input input-bordered input-sm flex-1"
+                   required />
+            <button type="submit" class="btn btn-primary btn-sm">Enviar</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <div class="card bg-base-100 shadow">
+        <div class="card-body gap-3">
+          <h2 class="card-title text-base">Detalles</h2>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="opacity-60">Tipo</span>
+              <span class="font-medium"><%= ticket.at("request_type_name") %></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="opacity-60">Departamento</span>
+              <span class="font-medium"><%= ticket.at("department_name") %></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="opacity-60">Asignado a</span>
+              <span class="font-medium"><%= ticket.at("assigned_to_name").empty() ? "Sin asignar" : ticket.at("assigned_to_name") %></span>
+            </div>
+            <div class="flex justify-between">
+              <span class="opacity-60">Creado</span>
+              <span class="font-medium"><%= ticket.at("created_at") %></span>
+            </div>
+<%c++ if (!ticket.at("due_date").empty()) { %>
+            <div class="flex justify-between">
+              <span class="opacity-60">Vence</span>
+              <span class="font-medium"><%= ticket.at("due_date") %></span>
+            </div>
+<%c++ } %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
