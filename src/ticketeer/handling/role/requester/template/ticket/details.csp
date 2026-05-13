@@ -2,6 +2,7 @@
   using Row = std::map<std::string, std::string>;
   auto& ticket = std::any_cast<Row&>(@@["ticket"]);
   auto& activities = std::any_cast<std::vector<Row>&>(@@["activities"]);
+  auto& o = requester_ticket_details_tmp_stream;
 %>
 <div>
   <div class="mb-6 flex items-center gap-3">
@@ -14,9 +15,9 @@
       </svg>
       Volver
     </button>
-    <h1 class="text-2xl font-bold">Ticket #<%= ticket.at("id") %></h1>
-    <span class="badge badge-ghost"><%= ticket.at("status_name") %></span>
-    <span class="badge badge-outline"><%= ticket.at("priority_name") %></span>
+    <h1 class="text-2xl font-bold">Ticket #<%c++ o << ticket.at("id"); %></h1>
+    <span class="badge badge-ghost"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("status_name")); %></span>
+    <span class="badge badge-outline"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("priority_name")); %></span>
   </div>
 
   <div class="grid gap-6 lg:grid-cols-3">
@@ -24,7 +25,7 @@
       <div class="card bg-base-100 shadow">
         <div class="card-body">
           <h2 class="card-title text-base">Descripción</h2>
-          <p class="text-sm leading-relaxed"><%= ticket.at("description") %></p>
+          <p class="text-sm leading-relaxed"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("description")); %></p>
         </div>
       </div>
 
@@ -36,21 +37,21 @@
             <div class="flex gap-3">
               <div class="avatar placeholder flex-shrink-0">
                 <div class="w-8 rounded-full bg-base-300 text-base-content">
-                  <span class="text-xs"><%= a.at("profile_name").size() >= 2 ? a.at("profile_name").substr(0,2) : "??" %></span>
+                  <span class="text-xs"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("profile_name").size() >= 2 ? a.at("profile_name").substr(0, 2) : "??"); %></span>
                 </div>
               </div>
               <div class="flex-1">
                 <div class="flex items-baseline gap-2">
-                  <span class="text-sm font-semibold"><%= a.at("profile_name") %></span>
-                  <span class="text-xs opacity-50"><%= a.at("created_at") %></span>
+                  <span class="text-sm font-semibold"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("profile_name")); %></span>
+                  <span class="text-xs opacity-50"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("created_at")); %></span>
                 </div>
-                <p class="text-sm opacity-80 mt-0.5"><%= a.at("body") %></p>
+                <p class="text-sm opacity-80 mt-0.5"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("body")); %></p>
               </div>
             </div>
 <%c++ } %>
           </div>
 
-          <form hx-post="/ticketeer/requester/ticket/<%= ticket.at("id") %>/activity/create/message"
+          <form hx-post="/ticketeer/requester/ticket/<%c++ o << ticket.at("id"); %>/activity/create/message"
                 hx-target="#activities"
                 hx-swap="beforeend"
                 hx-on::after-request="this.reset()"
@@ -73,24 +74,24 @@
           <div class="space-y-2 text-sm">
             <div class="flex justify-between">
               <span class="opacity-60">Tipo</span>
-              <span class="font-medium"><%= ticket.at("request_type_name") %></span>
+              <span class="font-medium"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("request_type_name")); %></span>
             </div>
             <div class="flex justify-between">
               <span class="opacity-60">Departamento</span>
-              <span class="font-medium"><%= ticket.at("department_name") %></span>
+              <span class="font-medium"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("department_name")); %></span>
             </div>
             <div class="flex justify-between">
               <span class="opacity-60">Asignado a</span>
-              <span class="font-medium"><%= ticket.at("assigned_to_name").empty() ? "Sin asignar" : ticket.at("assigned_to_name") %></span>
+              <span class="font-medium"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("assigned_to_name").empty() ? "Sin asignar" : ticket.at("assigned_to_name")); %></span>
             </div>
             <div class="flex justify-between">
               <span class="opacity-60">Creado</span>
-              <span class="font-medium"><%= ticket.at("created_at") %></span>
+              <span class="font-medium"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("created_at")); %></span>
             </div>
 <%c++ if (!ticket.at("due_date").empty()) { %>
             <div class="flex justify-between">
               <span class="opacity-60">Vence</span>
-              <span class="font-medium"><%= ticket.at("due_date") %></span>
+              <span class="font-medium"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("due_date")); %></span>
             </div>
 <%c++ } %>
           </div>

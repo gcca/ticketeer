@@ -2,6 +2,7 @@
   using Row = std::map<std::string, std::string>;
   auto& tickets = std::any_cast<std::vector<Row>&>(@@["tickets"]);
   auto& search = std::any_cast<std::string&>(@@["search"]);
+  auto& o = requester_ticket_list_tmp_stream;
 %>
 <div>
   <div class="mb-6 flex items-center justify-between">
@@ -23,7 +24,7 @@
   <div class="mb-4">
     <input type="text"
            name="s"
-           value="<%= search %>"
+           value="<%c++ o << drogon::HttpViewData::htmlTranslate(search); %>"
            placeholder="Buscar tickets..."
            class="input input-bordered w-full sm:w-72"
            hx-get="/ticketeer/requester/ticket/list"
@@ -52,19 +53,19 @@
         </tr>
 <%c++ } else { for (const auto& t : tickets) { %>
         <tr class="hover cursor-pointer"
-            hx-get="/ticketeer/requester/ticket/<%= t.at("id") %>/details"
+            hx-get="/ticketeer/requester/ticket/<%c++ o << t.at("id"); %>/details"
             hx-target="#main-content"
             hx-swap="innerHTML">
-          <td class="font-mono text-xs opacity-60">#<%= t.at("id") %></td>
-          <td class="max-w-xs truncate"><%= t.at("description") %></td>
-          <td class="text-sm"><%= t.at("request_type_name") %></td>
+          <td class="font-mono text-xs opacity-60">#<%c++ o << t.at("id"); %></td>
+          <td class="max-w-xs truncate"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("description")); %></td>
+          <td class="text-sm"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("request_type_name")); %></td>
           <td>
-            <span class="badge badge-sm badge-ghost"><%= t.at("status_name") %></span>
+            <span class="badge badge-sm badge-ghost"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("status_name")); %></span>
           </td>
           <td>
-            <span class="badge badge-sm badge-outline"><%= t.at("priority_name") %></span>
+            <span class="badge badge-sm badge-outline"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("priority_name")); %></span>
           </td>
-          <td class="text-xs opacity-60"><%= t.at("created_at") %></td>
+          <td class="text-xs opacity-60"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("created_at")); %></td>
         </tr>
 <%c++ } } %>
       </tbody>
