@@ -10,10 +10,10 @@ namespace ticketeer {
 class Requester : public drogon::HttpController<Requester> {
 public:
   METHOD_LIST_BEGIN
-  METHOD_ADD(Requester::IndexGet, "", drogon::Get,
-                "ticketeer::handling::auth::middlewares::LogInRequired",
-                "ticketeer::handling::role::requester::middlewares::"
-                "RoleRequesterRequired");
+  METHOD_ADD(Requester::Index, "", drogon::Get,
+             "ticketeer::handling::auth::middlewares::LogInRequired",
+             "ticketeer::handling::role::requester::middlewares::"
+             "RoleRequesterRequired");
   METHOD_ADD(Requester::TicketList, "/ticket/list", drogon::Get,
              "ticketeer::handling::auth::middlewares::LogInRequired",
              "ticketeer::handling::role::requester::middlewares::"
@@ -23,11 +23,12 @@ public:
              "ticketeer::handling::role::requester::middlewares::"
              "RoleRequesterRequired");
   METHOD_ADD(Requester::TicketDetails, "/ticket/{ticket_id}/details",
-             drogon::Get, "ticketeer::handling::auth::middlewares::LogInRequired",
+             drogon::Get,
+             "ticketeer::handling::auth::middlewares::LogInRequired",
              "ticketeer::handling::role::requester::middlewares::"
              "RoleRequesterRequired");
-  METHOD_ADD(Requester::TicketActivityList,
-             "/ticket/{ticket_id}/activity/list", drogon::Get,
+  METHOD_ADD(Requester::TicketActivityList, "/ticket/{ticket_id}/activity/list",
+             drogon::Get,
              "ticketeer::handling::auth::middlewares::LogInRequired",
              "ticketeer::handling::role::requester::middlewares::"
              "RoleRequesterRequired");
@@ -38,9 +39,8 @@ public:
              "RoleRequesterRequired");
   METHOD_LIST_END
 
-  void
-  IndexGet(const drogon::HttpRequestPtr &req,
-           std::function<void(const drogon::HttpResponsePtr &)> &&callback);
+  void Index(const drogon::HttpRequestPtr &req,
+             std::function<void(const drogon::HttpResponsePtr &)> &&callback);
 
   void
   TicketList(const drogon::HttpRequestPtr &req,

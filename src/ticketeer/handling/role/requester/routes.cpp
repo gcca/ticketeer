@@ -226,7 +226,7 @@ FetchDefaultAssignedToId(quill::Logger *logger, sqlite3 *db) {
 
 namespace ticketeer {
 
-void Requester::IndexGet(const drogon::HttpRequestPtr &req,
+void Requester::Index(const drogon::HttpRequestPtr &req,
                          Callback &&callback) {
   auto *logger = quill::Frontend::get_logger("root");
   const auto token = req->getCookie("token");
