@@ -226,7 +226,7 @@ FetchDefaultAssignedToId(quill::Logger *logger, sqlite3 *db) {
 
 namespace ticketeer {
 
-void Requester::Index(const drogon::HttpRequestPtr &req,
+void Requester::Home(const drogon::HttpRequestPtr &req,
                          Callback &&callback) {
   auto *logger = quill::Frontend::get_logger("root");
   const auto token = req->getCookie("token");
@@ -245,7 +245,7 @@ void Requester::Index(const drogon::HttpRequestPtr &req,
   drogon::HttpViewData data;
   data.insert("username", profile->username);
   data.insert("name", profile->name);
-  callback(drogon::HttpResponse::newHttpViewResponse("index", data));
+  callback(drogon::HttpResponse::newHttpViewResponse("home", data));
 }
 
 void Requester::TicketList(const drogon::HttpRequestPtr &req,
@@ -271,7 +271,7 @@ void Requester::TicketList(const drogon::HttpRequestPtr &req,
   drogon::HttpViewData data;
   data.insert("tickets", tickets);
   data.insert("search", search);
-  callback(drogon::HttpResponse::newHttpViewResponse("ticket_list", data));
+  callback(drogon::HttpResponse::newHttpViewResponse("list", data));
 }
 
 void Requester::TicketCreate(const drogon::HttpRequestPtr &req,
@@ -363,7 +363,7 @@ void Requester::TicketCreate(const drogon::HttpRequestPtr &req,
   drogon::HttpViewData data;
   data.insert("tickets", tickets);
   data.insert("search", std::string(""));
-  callback(drogon::HttpResponse::newHttpViewResponse("ticket_list", data));
+  callback(drogon::HttpResponse::newHttpViewResponse("list", data));
 }
 
 void Requester::TicketDetails(const drogon::HttpRequestPtr &req,
@@ -395,7 +395,7 @@ void Requester::TicketDetails(const drogon::HttpRequestPtr &req,
   drogon::HttpViewData data;
   data.insert("ticket", *ticket);
   data.insert("activities", activities);
-  callback(drogon::HttpResponse::newHttpViewResponse("ticket_details", data));
+  callback(drogon::HttpResponse::newHttpViewResponse("details", data));
 }
 
 void Requester::TicketActivityList(const drogon::HttpRequestPtr &req,
@@ -420,7 +420,7 @@ void Requester::TicketActivityList(const drogon::HttpRequestPtr &req,
 
   drogon::HttpViewData data;
   data.insert("activities", activities);
-  callback(drogon::HttpResponse::newHttpViewResponse("ticket_details", data));
+  callback(drogon::HttpResponse::newHttpViewResponse("details", data));
 }
 
 void Requester::TicketActivityCreateMessage(const drogon::HttpRequestPtr &req,
@@ -480,7 +480,7 @@ SELECT ?, p.id, 'message', ?
 
   drogon::HttpViewData data;
   data.insert("activity", activity);
-  callback(drogon::HttpResponse::newHttpViewResponse("ticket_activity_message", data));
+  callback(drogon::HttpResponse::newHttpViewResponse("activity_message", data));
 }
 
 } // namespace ticketeer

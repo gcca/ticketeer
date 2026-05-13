@@ -2,7 +2,7 @@
   using Row = std::map<std::string, std::string>;
   auto& tickets = std::any_cast<std::vector<Row>&>(@@["tickets"]);
   auto& search = std::any_cast<std::string&>(@@["search"]);
-  auto& o = ticket_list_tmp_stream;
+  auto& o = list_tmp_stream;
 %>
 <div>
   <div class="mb-6 flex items-center justify-between">

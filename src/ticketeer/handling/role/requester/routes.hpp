@@ -10,7 +10,7 @@ namespace ticketeer {
 class Requester : public drogon::HttpController<Requester> {
 public:
   METHOD_LIST_BEGIN
-  METHOD_ADD(Requester::Index, "", drogon::Get,
+  METHOD_ADD(Requester::Home, "", drogon::Get,
              "ticketeer::handling::auth::middlewares::LogInRequired",
              "ticketeer::handling::role::requester::middlewares::"
              "RoleRequesterRequired");
@@ -39,7 +39,7 @@ public:
              "RoleRequesterRequired");
   METHOD_LIST_END
 
-  void Index(const drogon::HttpRequestPtr &req,
+  void Home(const drogon::HttpRequestPtr &req,
              std::function<void(const drogon::HttpResponsePtr &)> &&callback);
 
   void
