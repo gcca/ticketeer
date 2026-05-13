@@ -47,6 +47,10 @@ int main(int argc, char *argv[]) {
   const auto port = options.port;
   LOGJ_INFO(logger, "ticketeer: listening", bind, port);
 
-  drogon::app().setClientMaxBodySize(6L * 1024 * 1024);
+  drogon::app()
+      .setDocumentRoot("./static")
+      .setUploadPath("")
+      .setClientMaxBodySize(6L * 1024 * 1024)
+      .setClientMaxMemoryBodySize(6L * 1024 * 1024);
   drogon::app().addListener(options.bind, options.port).run();
 }
