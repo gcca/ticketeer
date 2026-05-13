@@ -10,6 +10,10 @@ namespace ticketeer {
 class Requester : public drogon::HttpController<Requester> {
 public:
   METHOD_LIST_BEGIN
+  METHOD_ADD(Requester::IndexGet, "", drogon::Get,
+                "ticketeer::handling::auth::middlewares::LogInRequired",
+                "ticketeer::handling::role::requester::middlewares::"
+                "RoleRequesterRequired");
   METHOD_ADD(Requester::TicketList, "/ticket/list", drogon::Get,
              "ticketeer::handling::auth::middlewares::LogInRequired",
              "ticketeer::handling::role::requester::middlewares::"
@@ -33,6 +37,10 @@ public:
              "ticketeer::handling::role::requester::middlewares::"
              "RoleRequesterRequired");
   METHOD_LIST_END
+
+  void
+  IndexGet(const drogon::HttpRequestPtr &req,
+           std::function<void(const drogon::HttpResponsePtr &)> &&callback);
 
   void
   TicketList(const drogon::HttpRequestPtr &req,

@@ -10,7 +10,7 @@
       <p class="mt-1 text-sm opacity-60">Solicitudes e incidentes registrados</p>
     </div>
     <button class="btn btn-primary btn-sm"
-            hx-get="/ticketeer/requester/v1/ticket/create"
+            hx-get="/ticketeer/requester/ticket/create"
             hx-target="#main-content"
             hx-swap="innerHTML">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
@@ -26,7 +26,7 @@
            value="<%= search %>"
            placeholder="Buscar tickets..."
            class="input input-bordered w-full sm:w-72"
-           hx-get="/ticketeer/requester/v1/ticket/list"
+           hx-get="/ticketeer/requester/ticket/list"
            hx-target="#main-content"
            hx-swap="innerHTML"
            hx-trigger="keyup changed delay:400ms"
@@ -52,7 +52,7 @@
         </tr>
 <%c++ } else { for (const auto& t : tickets) { %>
         <tr class="hover cursor-pointer"
-            hx-get="/ticketeer/requester/v1/ticket/<%= t.at("id") %>/details"
+            hx-get="/ticketeer/requester/ticket/<%= t.at("id") %>/details"
             hx-target="#main-content"
             hx-swap="innerHTML">
           <td class="font-mono text-xs opacity-60">#<%= t.at("id") %></td>

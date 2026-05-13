@@ -226,6 +226,28 @@ FetchDefaultAssignedToId(quill::Logger *logger, sqlite3 *db) {
 
 namespace ticketeer {
 
+void Requester::IndexGet(const drogon::HttpRequestPtr &req,
+                         Callback &&callback) {
+  auto *logger = quill::Frontend::get_logger("root");
+  const auto token = req->getCookie("token");
+
+  sqlite3 *db = ConnectDB();
+  if (!db)
+    return BadRequest(callback, "Database unavailable",
+                      drogon::k503ServiceUnavailable);
+
+  const auto profile = FetchProfile(logger, db, token);
+  sqlite3_close(db);
+
+  if (!profile)
+    return callback(drogon::HttpResponse::newRedirectionResponse("/ticketeer/auth/signin"));
+
+  drogon::HttpViewData data;
+  data.insert("username", profile->username);
+  data.insert("name", profile->name);
+  callback(drogon::HttpResponse::newHttpViewResponse("requester_index", data));
+}
+
 void Requester::TicketList(const drogon::HttpRequestPtr &req,
                            Callback &&callback) {
   auto *logger = quill::Frontend::get_logger("root");
@@ -240,15 +262,6 @@ void Requester::TicketList(const drogon::HttpRequestPtr &req,
   if (!profile) {
     sqlite3_close(db);
     return callback(drogon::HttpResponse::newRedirectionResponse("/ticketeer/auth/signin"));
-  }
-
-  const bool is_htmx = !req->getHeader("HX-Request").empty();
-  if (!is_htmx) {
-    sqlite3_close(db);
-    drogon::HttpViewData data;
-    data.insert("username", profile->username);
-    data.insert("name", profile->name);
-    return callback(drogon::HttpResponse::newHttpViewResponse("requester_index", data));
   }
 
   const auto search = req->getParameter("s");

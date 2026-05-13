@@ -6,7 +6,7 @@
 <div>
   <div class="mb-6 flex items-center gap-3">
     <button class="btn btn-ghost btn-sm"
-            hx-get="/ticketeer/requester/v1/ticket/list"
+            hx-get="/ticketeer/requester/ticket/list"
             hx-target="#main-content"
             hx-swap="innerHTML">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
@@ -50,7 +50,7 @@
 <%c++ } %>
           </div>
 
-          <form hx-post="/ticketeer/requester/v1/ticket/<%= ticket.at("id") %>/activity/create/message"
+          <form hx-post="/ticketeer/requester/ticket/<%= ticket.at("id") %>/activity/create/message"
                 hx-target="#activities"
                 hx-swap="beforeend"
                 hx-on::after-request="this.reset()"

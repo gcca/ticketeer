@@ -10,7 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js" integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V" crossorigin="anonymous"></script>
     <script>
       document.addEventListener('DOMContentLoaded', function () {
-        htmx.ajax('GET', '/ticketeer/requester/v1/ticket/list', {
+        htmx.ajax('GET', '/ticketeer/requester/ticket/list', {
           target: '#main-content',
           swap: 'innerHTML'
         });
@@ -50,7 +50,7 @@
             <ul class="menu gap-1">
               <li>
                 <a class="active"
-                   hx-get="/ticketeer/requester/v1/ticket/list"
+                   hx-get="/ticketeer/requester/ticket/list"
                    hx-target="#main-content"
                    hx-swap="innerHTML">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
