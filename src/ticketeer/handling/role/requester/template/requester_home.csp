@@ -28,6 +28,7 @@
         const modules = {
           tickets: '/ticketeer/requester/ticket/list'
         };
+        const ticketFilterKeys = ['s', 'status_id', 'priority_id', 'sort', 'dir'];
         const ticketId = params.get('i');
         if (ticketId) {
           htmx.ajax('GET', '/ticketeer/requester/ticket/' + ticketId + '/details', {
@@ -35,8 +36,14 @@
             swap: 'innerHTML'
           });
         } else {
-          const s = params.get('s');
-          const moduleUrl = (modules[params.get('t')] || modules.tickets) + (s ? '?s=' + encodeURIComponent(s) : '');
+          const moduleParams = new URLSearchParams();
+          ticketFilterKeys.forEach(function(key) {
+            const value = params.get(key);
+            if (value) moduleParams.set(key, value);
+          });
+          if (params.get('p')) moduleParams.set('p', params.get('p'));
+          const query = moduleParams.toString();
+          const moduleUrl = (modules[params.get('t')] || modules.tickets) + (query ? '?' + query : '');
           htmx.ajax('GET', moduleUrl, {
             target: '#main-content',
             swap: 'innerHTML'
@@ -45,14 +52,38 @@
         document.body.addEventListener('pointerdown', function (evt) {
           const el = evt.target.closest('[hx-push-url]');
           if (!el) return;
-          const s = new URLSearchParams(window.location.search).get('s');
+          const currentParams = new URLSearchParams(window.location.search);
           const pu = el.getAttribute('hx-push-url') || '';
           const pp = new URLSearchParams(pu.replace(/^\?/, ''));
-          s ? pp.set('s', s) : pp.delete('s');
+          ticketFilterKeys.forEach(function(key) {
+            const value = currentParams.get(key);
+            if (!pp.has(key)) {
+              value ? pp.set(key, value) : pp.delete(key);
+            }
+          });
+          if (!pp.has('p')) {
+            const p = currentParams.get('p');
+            p ? pp.set('p', p) : pp.delete('p');
+          }
           el.setAttribute('hx-push-url', '?' + pp.toString());
-          const base = (el.getAttribute('hx-get') || '').split('?')[0];
-          if (base.endsWith('/ticket/list'))
-            el.setAttribute('hx-get', s ? base + '?s=' + encodeURIComponent(s) : base);
+          const hxGet = el.getAttribute('hx-get') || '';
+          const parts = hxGet.split('?');
+          const base = parts[0];
+          if (base.endsWith('/ticket/list')) {
+            const gp = new URLSearchParams(parts[1] || '');
+            ticketFilterKeys.forEach(function(key) {
+              const value = currentParams.get(key);
+              if (!gp.has(key)) {
+                value ? gp.set(key, value) : gp.delete(key);
+              }
+            });
+            if (!gp.has('p')) {
+              const p = currentParams.get('p');
+              p ? gp.set('p', p) : gp.delete('p');
+            }
+            const query = gp.toString();
+            el.setAttribute('hx-get', query ? base + '?' + query : base);
+          }
         });
       });
     </script>

@@ -28,11 +28,12 @@ int main(int argc, char *argv[]) {
       ticketeer::core::logging::ParseLogLevel(options.log_level));
 
   LOGJ_INFO(logger, "ticketeer: starting", settings.DB_URL, settings.UPLOAD_DIR,
-            options.bind, options.port, options.log_level);
+            settings.SERVER_TIMEZONE, options.bind, options.port,
+            options.log_level);
 
   drogon::app()
       .registerHandler("/", &IndexHandler)
-      .registerHandler("/ticketeer/?$", &IndexHandler)
+      .registerHandler("/ticketeer/", &IndexHandler)
       .registerHandler(
           "/ticketeer/healthcheck",
           [](const drogon::HttpRequestPtr &,

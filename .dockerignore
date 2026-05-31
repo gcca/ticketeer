@@ -7,4 +7,6 @@ compile_commands.json
 *.a
 *.so
 *.dylib
-db
+db/*
+!db/migrations/
+!db/migrations/*.sql

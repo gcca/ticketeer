@@ -3,9 +3,80 @@
   using Rows = std::vector<Row>;
   auto& tickets = std::any_cast<Rows&>(@@["tickets"]);
   auto& search = std::any_cast<std::string&>(@@["search"]);
-  auto& departments = std::any_cast<Rows&>(@@["departments"]);
-  auto& department_id = std::any_cast<std::string&>(@@["department_id"]);
+  auto& requester_id = std::any_cast<std::string&>(@@["requester_id"]);
+  auto& status_id = std::any_cast<std::string&>(@@["status_id"]);
+  auto& priority_id = std::any_cast<std::string&>(@@["priority_id"]);
+  auto& assigned_to_id = std::any_cast<std::string&>(@@["assigned_to_id"]);
+  auto& requesters = std::any_cast<Rows&>(@@["requesters"]);
+  auto& statuses = std::any_cast<Rows&>(@@["statuses"]);
+  auto& priorities = std::any_cast<Rows&>(@@["priorities"]);
+  auto& assignees = std::any_cast<Rows&>(@@["assignees"]);
+  auto& page = std::any_cast<std::string&>(@@["page"]);
+  auto& page_count = std::any_cast<std::string&>(@@["page_count"]);
+  auto& prev_page = std::any_cast<std::string&>(@@["prev_page"]);
+  auto& next_page = std::any_cast<std::string&>(@@["next_page"]);
+  auto& total_count = std::any_cast<std::string&>(@@["total_count"]);
+  auto& sort = std::any_cast<std::string&>(@@["sort"]);
+  auto& dir = std::any_cast<std::string&>(@@["dir"]);
   auto& o = supervisor_ticket_list_tmp_stream;
+  auto encode = [](const std::string& value) {
+    static constexpr char hex[] = "0123456789ABCDEF";
+    std::string encoded;
+    for (const unsigned char ch : value) {
+      if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
+          (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' ||
+          ch == '.' || ch == '~') {
+        encoded.push_back(static_cast<char>(ch));
+      } else {
+        encoded.push_back('%');
+        encoded.push_back(hex[ch >> 4]);
+        encoded.push_back(hex[ch & 15]);
+      }
+    }
+    return encoded;
+  };
+  auto sortNextDir = [&](const std::string& key) {
+    return sort == key && dir == "asc" ? std::string("desc") : std::string("asc");
+  };
+  auto buildSortUrl = [&](std::string url, const std::string& key) {
+    bool has_query = url.find('?') != std::string::npos;
+    auto append = [&](const std::string& name, const std::string& value) {
+      if (value.empty()) return;
+      url += has_query ? '&' : '?';
+      has_query = true;
+      url += name + "=" + encode(value);
+    };
+    append("s", search);
+    append("requester_id", requester_id);
+    append("status_id", status_id);
+    append("priority_id", priority_id);
+    append("assigned_to_id", assigned_to_id);
+    append("sort", key);
+    append("dir", sortNextDir(key));
+    return url;
+  };
+  auto renderSortIcon = [&](const std::string& key) {
+    if (sort == key && dir == "asc") {
+      o << "<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\" stroke-width=\"1.75\" stroke=\"currentColor\" class=\"h-3 w-3\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M4.5 15.75 12 8.25l7.5 7.5\" /></svg>";
+    } else if (sort == key) {
+      o << "<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\" stroke-width=\"1.75\" stroke=\"currentColor\" class=\"h-3 w-3\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M19.5 8.25 12 15.75 4.5 8.25\" /></svg>";
+    } else {
+      o << "<svg xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\" stroke-width=\"1.75\" stroke=\"currentColor\" class=\"h-3 w-3 opacity-30\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M8.25 15 12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9\" /></svg>";
+    }
+  };
+  auto renderSortHeader = [&](const std::string& key, const std::string& label) {
+    const auto aria_sort = sort == key ? (dir == "asc" ? "ascending" : "descending") : "none";
+    const auto hx_get = buildSortUrl("/ticketeer/supervisor/ticket/list", key);
+    const auto hx_push_url = buildSortUrl("?t=tickets", key);
+    o << "<th aria-sort=\"" << aria_sort << "\">";
+    o << "<button type=\"button\" class=\"inline-flex items-center gap-1 whitespace-nowrap rounded px-1 py-0.5 hover:bg-base-200\" hx-get=\"";
+    o << drogon::HttpViewData::htmlTranslate(hx_get);
+    o << "\" hx-target=\"#main-content\" hx-swap=\"innerHTML\" hx-push-url=\"";
+    o << drogon::HttpViewData::htmlTranslate(hx_push_url);
+    o << "\">" << drogon::HttpViewData::htmlTranslate(label);
+    renderSortIcon(key);
+    o << "</button></th>";
+  };
 %>
 <div>
   <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -25,46 +96,140 @@
     </button>
   </div>
 
-  <div class="mb-4 flex flex-wrap gap-3">
-    <input id="ticket-search"
-           type="text"
-           name="s"
-           value="<%c++ o << drogon::HttpViewData::htmlTranslate(search); %>"
-           placeholder="Buscar por solicitante, estado, área o descripción..."
-           class="input input-bordered flex-1 sm:w-96 sm:flex-none"
-           hx-get="/ticketeer/supervisor/ticket/list"
-           hx-target="#main-content"
-           hx-swap="innerHTML"
-           hx-trigger="keyup changed delay:400ms"
-           hx-include="[name='s'],[name='d']"
-           hx-preserve
-           hx-on::after-request="const p=new URLSearchParams(window.location.search); this.value ? p.set('s',this.value) : p.delete('s'); p.set('t','tickets'); history.replaceState(null,'','?'+p.toString())" />
-    <select name="d"
-            class="select select-bordered"
-            hx-get="/ticketeer/supervisor/ticket/list"
-            hx-target="#main-content"
-            hx-swap="innerHTML"
-            hx-trigger="change"
-            hx-include="[name='s'],[name='d']">
-      <option value="">Todas las áreas</option>
-<%c++ for (const auto& dept : departments) { %>
-      <option value="<%c++ o << dept.at("id"); %>"<%c++ if (dept.at("id") == department_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(dept.at("name")); %></option>
+  <form id="ticket-filters"
+        class="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4"
+        hx-on::after-request="const p=new URLSearchParams(); new FormData(this).forEach(function(v,k){ if(v) p.set(k,v); }); p.set('t','tickets'); history.replaceState(null,'','?'+p.toString())">
+    <input type="hidden" name="sort" value="<%c++ o << drogon::HttpViewData::htmlTranslate(sort); %>" />
+    <input type="hidden" name="dir" value="<%c++ o << drogon::HttpViewData::htmlTranslate(dir); %>" />
+    <label class="form-control">
+      <div class="label pb-1">
+        <span class="label-text inline-flex items-center gap-1.5 text-xs font-semibold uppercase opacity-60">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" class="h-3.5 w-3.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+          </svg>
+          Solicitante
+        </span>
+      </div>
+      <select name="requester_id"
+              class="select select-bordered w-full"
+              hx-get="/ticketeer/supervisor/ticket/list"
+              hx-target="#main-content"
+              hx-swap="innerHTML"
+              hx-trigger="change"
+              hx-include="#ticket-filters">
+        <option value=""<%c++ if (requester_id.empty()) { o << " selected"; } %>>Todos</option>
+<%c++ for (const auto& r : requesters) { %>
+        <option value="<%c++ o << r.at("id"); %>"<%c++ if (r.at("id") == requester_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(r.at("name")); %></option>
 <%c++ } %>
-    </select>
-  </div>
+      </select>
+    </label>
+
+    <label class="form-control">
+      <div class="label pb-1">
+        <span class="label-text inline-flex items-center gap-1.5 text-xs font-semibold uppercase opacity-60">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" class="h-3.5 w-3.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+          </svg>
+          Estado
+        </span>
+      </div>
+      <select name="status_id"
+              class="select select-bordered w-full"
+              hx-get="/ticketeer/supervisor/ticket/list"
+              hx-target="#main-content"
+              hx-swap="innerHTML"
+              hx-trigger="change"
+              hx-include="#ticket-filters">
+        <option value=""<%c++ if (status_id.empty()) { o << " selected"; } %>>Todos</option>
+<%c++ for (const auto& s : statuses) { %>
+        <option value="<%c++ o << s.at("id"); %>"<%c++ if (s.at("id") == status_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(s.at("name")); %></option>
+<%c++ } %>
+      </select>
+    </label>
+
+    <label class="form-control">
+      <div class="label pb-1">
+        <span class="label-text inline-flex items-center gap-1.5 text-xs font-semibold uppercase opacity-60">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" class="h-3.5 w-3.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 3v18M3 4.5h12.75L14.25 9l1.5 4.5H3" />
+          </svg>
+          Prioridad
+        </span>
+      </div>
+      <select name="priority_id"
+              class="select select-bordered w-full"
+              hx-get="/ticketeer/supervisor/ticket/list"
+              hx-target="#main-content"
+              hx-swap="innerHTML"
+              hx-trigger="change"
+              hx-include="#ticket-filters">
+        <option value=""<%c++ if (priority_id.empty()) { o << " selected"; } %>>Todas</option>
+<%c++ for (const auto& p : priorities) { %>
+        <option value="<%c++ o << p.at("id"); %>"<%c++ if (p.at("id") == priority_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(p.at("name")); %></option>
+<%c++ } %>
+      </select>
+    </label>
+
+    <label class="form-control">
+      <div class="label pb-1">
+        <span class="label-text inline-flex items-center gap-1.5 text-xs font-semibold uppercase opacity-60">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" class="h-3.5 w-3.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.941 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.75l.001-.031m11.999 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a5.971 5.971 0 0 0-.941 3.197m0 0a9.094 9.094 0 0 1-3.742-.479 3 3 0 0 1 4.682-2.72M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+          </svg>
+          Asignado
+        </span>
+      </div>
+      <select name="assigned_to_id"
+              class="select select-bordered w-full"
+              hx-get="/ticketeer/supervisor/ticket/list"
+              hx-target="#main-content"
+              hx-swap="innerHTML"
+              hx-trigger="change"
+              hx-include="#ticket-filters">
+        <option value=""<%c++ if (assigned_to_id.empty()) { o << " selected"; } %>>Todos</option>
+        <option value="none"<%c++ if (assigned_to_id == "none") { o << " selected"; } %>>Sin asignar</option>
+<%c++ for (const auto& a : assignees) { %>
+        <option value="<%c++ o << a.at("id"); %>"<%c++ if (a.at("id") == assigned_to_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("name")); %></option>
+<%c++ } %>
+      </select>
+    </label>
+
+    <label class="form-control md:col-span-1 xl:col-span-2">
+      <div class="label pb-1">
+        <span class="label-text inline-flex items-center gap-1.5 text-xs font-semibold uppercase opacity-60">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" class="h-3.5 w-3.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+          </svg>
+          Buscar
+        </span>
+      </div>
+      <input id="ticket-search"
+             type="text"
+             name="s"
+             value="<%c++ o << drogon::HttpViewData::htmlTranslate(search); %>"
+             placeholder="Buscar por detalle"
+             class="input input-bordered w-full"
+             hx-get="/ticketeer/supervisor/ticket/list"
+             hx-target="#main-content"
+             hx-swap="innerHTML"
+             hx-trigger="keyup changed delay:400ms"
+             hx-include="#ticket-filters"
+             hx-preserve />
+    </label>
+  </form>
 
   <div class="overflow-x-auto rounded-lg bg-base-100 shadow">
     <table class="table">
       <thead>
         <tr>
           <th></th>
-          <th>Descripción</th>
-          <th>Solicitante</th>
-          <th>Área</th>
-          <th>Estado</th>
-          <th>Prioridad</th>
-          <th>Asignado</th>
-          <th>Creado</th>
+          <%c++ renderSortHeader("body", "Detalle"); %>
+          <%c++ renderSortHeader("requester", "Solicitante"); %>
+          <%c++ renderSortHeader("status", "Estado"); %>
+          <%c++ renderSortHeader("priority", "Prioridad"); %>
+          <%c++ renderSortHeader("assigned_to", "Asignado"); %>
+          <%c++ renderSortHeader("created_at", "Creado"); %>
+          <%c++ renderSortHeader("updated_at", "Actualizado"); %>
         </tr>
       </thead>
       <tbody>
@@ -72,16 +237,49 @@
         <tr>
           <td colspan="8" class="py-12 text-center opacity-50">No hay tickets para mostrar</td>
         </tr>
-<%c++ } else { for (const auto& t : tickets) { %>
+<%c++ } else { for (const auto& t : tickets) {
+  const auto& _body = t.at("body");
+  const std::string _body_modal_id = "supervisor-ticket-body-modal-" + t.at("id");
+%>
         <tr class="hover cursor-pointer"
             hx-get="/ticketeer/supervisor/ticket/<%c++ o << t.at("id"); %>/details"
             hx-target="#main-content"
             hx-swap="innerHTML"
             hx-push-url="?t=tickets&i=<%c++ o << t.at("id"); %>">
           <td class="font-mono text-xs opacity-60">#<%c++ o << t.at("id"); %></td>
-          <td class="max-w-sm truncate"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("description")); %></td>
+          <td class="max-w-sm">
+            <div class="flex min-w-0 items-center gap-2">
+              <div class="tooltip w-full min-w-0" data-tip="<%c++ o << drogon::HttpViewData::htmlTranslate(_body); %>" title="<%c++ o << drogon::HttpViewData::htmlTranslate(_body); %>">
+                <span class="block truncate"><%c++ o << drogon::HttpViewData::htmlTranslate(_body); %></span>
+              </div>
+              <button type="button"
+                      class="btn btn-ghost btn-xs shrink-0 md:hidden"
+                      aria-label="Ver detalle completo"
+                      aria-haspopup="dialog"
+                      onpointerdown="event.stopPropagation()"
+                      onclick="event.stopPropagation(); document.getElementById('<%c++ o << _body_modal_id; %>').showModal()">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" class="h-4 w-4">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12s3.75-6.75 9.75-6.75S21.75 12 21.75 12s-3.75 6.75-9.75 6.75S2.25 12 2.25 12Z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                </svg>
+              </button>
+            </div>
+            <dialog id="<%c++ o << _body_modal_id; %>" class="modal" onclick="event.stopPropagation()">
+              <div class="modal-box max-w-lg">
+                <h3 class="text-base font-bold">Detalle</h3>
+                <p class="mt-3 whitespace-pre-wrap text-sm"><%c++ o << drogon::HttpViewData::htmlTranslate(_body); %></p>
+                <div class="modal-action">
+                  <form method="dialog">
+                    <button class="btn btn-sm">Cerrar</button>
+                  </form>
+                </div>
+              </div>
+              <form method="dialog" class="modal-backdrop">
+                <button>Cerrar</button>
+              </form>
+            </dialog>
+          </td>
           <td class="text-sm"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("requester_name")); %></td>
-          <td class="text-sm"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("department_name")); %></td>
           <td class="max-w-xs">
             <div class="tooltip w-full" data-tip="<%c++ o << drogon::HttpViewData::htmlTranslate(t.at("status_name")); %>">
               <span class="badge badge-sm badge-ghost block truncate"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("status_name")); %></span>
@@ -90,9 +288,40 @@
           <td><span class="badge badge-sm badge-outline"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("priority_name")); %></span></td>
           <td class="text-sm"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("assigned_to_name").empty() ? "Sin asignar" : t.at("assigned_to_name")); %></td>
           <td class="text-xs opacity-60"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("created_at")); %></td>
+          <td class="text-xs opacity-60"><%c++ o << drogon::HttpViewData::htmlTranslate(t.at("updated_at")); %></td>
         </tr>
 <%c++ } } %>
       </tbody>
     </table>
   </div>
+<%c++ if (page_count != "1") { %>
+  <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <p class="text-xs opacity-60">
+      Página <%c++ o << page; %> de <%c++ o << page_count; %> · <%c++ o << tickets.size(); %> de <%c++ o << total_count; %> tickets
+    </p>
+    <div class="join">
+<%c++ if (page == "1") { %>
+      <button class="join-item btn btn-sm btn-disabled" disabled>Anterior</button>
+<%c++ } else { %>
+      <button class="join-item btn btn-sm"
+              hx-get="/ticketeer/supervisor/ticket/list?p=<%c++ o << prev_page; %>"
+              hx-target="#main-content"
+              hx-swap="innerHTML"
+              hx-include="#ticket-filters"
+              hx-push-url="?t=tickets&p=<%c++ o << prev_page; %>">Anterior</button>
+<%c++ } %>
+      <button class="join-item btn btn-sm btn-active" disabled><%c++ o << page; %></button>
+<%c++ if (page == page_count) { %>
+      <button class="join-item btn btn-sm btn-disabled" disabled>Siguiente</button>
+<%c++ } else { %>
+      <button class="join-item btn btn-sm"
+              hx-get="/ticketeer/supervisor/ticket/list?p=<%c++ o << next_page; %>"
+              hx-target="#main-content"
+              hx-swap="innerHTML"
+              hx-include="#ticket-filters"
+              hx-push-url="?t=tickets&p=<%c++ o << next_page; %>">Siguiente</button>
+<%c++ } %>
+    </div>
+  </div>
+<%c++ } %>
 </div>

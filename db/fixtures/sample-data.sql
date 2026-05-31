@@ -2,17 +2,14 @@ DELETE FROM helpdesk_ticket_activity_attachment;
 DELETE FROM helpdesk_ticket_activity;
 DELETE FROM helpdesk_ticket;
 DELETE FROM helpdesk_setting;
-DELETE FROM helpdesk_request_type;
-DELETE FROM helpdesk_request_category;
 DELETE FROM helpdesk_priority;
 DELETE FROM helpdesk_ticket_status;
 DELETE FROM helpdesk_profile;
-DELETE FROM helpdesk_department;
 DELETE FROM auth_session;
 DELETE FROM auth_user;
 DELETE FROM auth_app_provider;
 
-INSERT INTO auth_user (username, password, name, email) VALUES  -- password: test
+INSERT INTO auth_user (username, password, name, email) VALUES
     ('system',        'pbkdf2_sha256$600000$bf359be1cec54e26f601dc62501d18b4$4cd735b45be8b1d1312ab91ef5151dc3db5c127c9c64c4e4fdd3b0abe2849f75', 'System',           ''),
     ('administrator', 'pbkdf2_sha256$600000$d696a012ba29da26b56906ccd929e51b$4702095d1e618ee2cc0c2d40124f816bb0e69d2ff2f952981eb70a1e87fc3559', 'Albert Wesker',    'administrator@test.local'),
     ('supervisor01',  'pbkdf2_sha256$600000$8d2b537686c8ee9d958bb1e3a19856df$85bd67c1881f8efe5575e52b30cc521f55e7e6f9f1d3ba6f8e8c80999bcec013', 'Chris Redfield',   'supervisor01@test.local'),
@@ -36,15 +33,6 @@ INSERT INTO auth_user (username, password, name, email) VALUES  -- password: tes
     ('requester14',   'pbkdf2_sha256$600000$1d274349058af9de7c212b5a774cff25$0adb34ee644e352f13b3604c38a2e587780277ae643a4e8b692f38bd1b5294c7', 'Zombie G',         'requester14@test.local'),
     ('requester15',   'pbkdf2_sha256$600000$d5dcbdeead169b8a303a1ddbefc39a3c$58160b67203fdc662dea53b39b865280b6748a492a0828e8bf479ff087343373', 'Zombie H',         'requester15@test.local');
 
-INSERT INTO helpdesk_department (name, description) VALUES
-    ('IT Support',         'Soporte técnico a usuarios finales'),
-    ('Recursos Humanos',   'Gestión de personal y nómina'),
-    ('Finanzas',           'Contabilidad, pagos y presupuesto'),
-    ('Logística',          'Inventario, almacén y distribución'),
-    ('Seguridad',          'Seguridad física y digital'),
-    ('Infraestructura',    'Servidores, redes y telecomunicaciones'),
-    ('No Asociado',        'Departamento por defecto para tickets sin área asociada');
-
 INSERT INTO helpdesk_ticket_status (name, display_name, trait) VALUES
     ('unassigned',   'Sin asignar', 'open'),
     ('assigned',     'Asignado',    'open'),
@@ -60,114 +48,99 @@ INSERT INTO helpdesk_priority (name, display_name) VALUES
     ('high',     'Alta'),
     ('critical', 'Crítica');
 
-INSERT INTO helpdesk_request_category (name) VALUES
-    ('incident'),
-    ('service_request');
-
-INSERT INTO helpdesk_request_type
-    (name, category_id, default_priority_id, description)
-VALUES
-    ('hardware_failure',      1, 3, 'Fallo físico de equipo de cómputo'),
-    ('network_issue',         1, 3, 'Problemas de conectividad o red'),
-    ('account_access',        1, 2, 'Problemas de acceso a cuenta o sistema'),
-    ('password_reset',        2, 1, 'Restablecimiento de contraseña'),
-    ('software_installation', 2, 1, 'Instalación o actualización de software'),
-    ('equipment_request',     2, 2, 'Solicitud de equipo o periférico'),
-    ('vpn_access',            2, 2, 'Solicitud o problema de acceso VPN'),
-    ('printer_issue',         1, 2, 'Fallo o configuración de impresora');
-
-INSERT INTO helpdesk_profile (user_id, department_id, role) VALUES
-    (2,  1, 'administrator'),
-    (3,  1, 'supervisor'),
-    (4,  1, 'technician'),
-    (5,  1, 'technician'),
-    (6,  6, 'technician'),
-    (7,  6, 'technician'),
-    (8,  1, 'requester'),
-    (9,  1, 'requester'),
-    (10, 2, 'requester'),
-    (11, 2, 'requester'),
-    (12, 3, 'requester'),
-    (13, 3, 'requester'),
-    (14, 4, 'requester'),
-    (15, 4, 'requester'),
-    (16, 5, 'requester'),
-    (17, 5, 'requester'),
-    (18, 6, 'requester'),
-    (19, 6, 'requester'),
-    (20, 1, 'requester'),
-    (21, 2, 'requester'),
-    (22, 3, 'requester'),
-    ((SELECT id FROM auth_user WHERE username = 'system'),
-     (SELECT id FROM helpdesk_department WHERE name = 'No Asociado'),
-     'system');
+INSERT INTO helpdesk_profile (user_id, role) VALUES
+    (2,  'administrator'),
+    (3,  'supervisor'),
+    (4,  'technician'),
+    (5,  'technician'),
+    (6,  'technician'),
+    (7,  'technician'),
+    (8,  'requester'),
+    (9,  'requester'),
+    (10, 'requester'),
+    (11, 'requester'),
+    (12, 'requester'),
+    (13, 'requester'),
+    (14, 'requester'),
+    (15, 'requester'),
+    (16, 'requester'),
+    (17, 'requester'),
+    (18, 'requester'),
+    (19, 'requester'),
+    (20, 'requester'),
+    (21, 'requester'),
+    (22, 'requester'),
+    ((SELECT id FROM auth_user WHERE username = 'system'), 'system');
 
 INSERT INTO helpdesk_setting
-    (name, default_status_id, assigned_status_id, default_department_id, default_assigned_to_id, system_profile_id)
+    (name, default_status_id, assigned_status_id, default_assigned_to_id, default_ticket_priority_id, system_profile_id, ticket_body_maxlength, ticket_activity_body_maxlength, ticket_due_delta)
 VALUES (
     'default',
     (SELECT id FROM helpdesk_ticket_status WHERE name = 'unassigned'),
     (SELECT id FROM helpdesk_ticket_status WHERE name = 'assigned'),
-    (SELECT id FROM helpdesk_department WHERE name = 'No Asociado'),
     (SELECT id FROM helpdesk_profile WHERE role = 'supervisor'),
-    (SELECT id FROM helpdesk_profile WHERE role = 'system')
+    (SELECT id FROM helpdesk_priority WHERE name = 'medium'),
+    (SELECT id FROM helpdesk_profile WHERE role = 'system'),
+    570,
+    170,
+    172800
 );
 
 INSERT INTO helpdesk_ticket
-    (request_type_id, requester_id, assigned_to_id, department_id,
-     priority_id, status_id, description, created_at, updated_at)
+    (requester_id, assigned_to_id, priority_id, status_id,
+     body, created_at, updated_at)
 VALUES
-    (1, 7,  3, 1, 3, 3, 'La laptop no enciende después de una actualización de BIOS.',                        datetime('now', '-28 days'), datetime('now', '-27 days')),
-    (2, 8,  4, 1, 3, 5, 'Sin acceso a internet en toda la planta baja desde el lunes.',                       datetime('now', '-26 days'), datetime('now', '-20 days')),
-    (3, 9,  3, 2, 2, 5, 'Usuario bloqueado en el sistema de nómina después de tres intentos fallidos.',        datetime('now', '-25 days'), datetime('now', '-22 days')),
-    (4, 10, NULL, 2, 1, 1, 'Restablecer contraseña de correo corporativo.',                                   datetime('now', '-24 days'), datetime('now', '-24 days')),
-    (5, 11, 3, 3, 1, 3, 'Instalar Adobe Acrobat Reader en el equipo de contabilidad.',                        datetime('now', '-23 days'), datetime('now', '-23 days')),
-    (6, 12, NULL, 3, 2, 1, 'Solicitar un segundo monitor para el puesto de análisis financiero.',                 datetime('now', '-22 days'), datetime('now', '-22 days')),
-    (7, 13, 7, 4, 2, 2, 'No puede conectarse a VPN desde casa para acceder al ERP.',                       datetime('now', '-21 days'), datetime('now', '-21 days')),
-    (8, 14, NULL, 4, 2, 1, 'La impresora del almacén imprime páginas en blanco.',                                datetime('now', '-20 days'), datetime('now', '-19 days')),
-    (1, 15, 5, 5, 4, 2, 'El servidor de cámaras de seguridad no responde.',                                   datetime('now', '-19 days'), datetime('now', '-19 days')),
-    (2, 16, 6, 6, 4, 3, 'Caída total de la red en el datacenter secundario.',                                  datetime('now', '-18 days'), datetime('now', '-17 days')),
-    (3, 17, 5, 6, 3, 3, 'Acceso denegado al portal de administración de infraestructura.',                    datetime('now', '-17 days'), datetime('now', '-16 days')),
-    (4, 18, NULL, 2, 1, 1, 'Cambio de contraseña obligatorio expirado.',                                      datetime('now', '-16 days'), datetime('now', '-16 days')),
-    (5, 19, 3, 1, 1, 5, 'Instalar cliente VPN GlobalProtect en nuevo equipo.',                                datetime('now', '-15 days'), datetime('now', '-10 days')),
-    (6, 20, 4, 2, 2, 5, 'Teclado y ratón inalámbrico para trabajo remoto.',                                   datetime('now', '-14 days'), datetime('now', '-8 days')),
-    (7, 21, NULL, 3, 2, 1, 'VPN cae al intentar conectarse con token MFA.',                                   datetime('now', '-13 days'), datetime('now', '-13 days')),
-    (8, 7,  3, 1, 2, 4, 'Impresora de recepción no reconocida tras reinstalación de Windows.',                datetime('now', '-12 days'), datetime('now', '-11 days')),
-    (1, 8,  4, 1, 3, 3, 'Pantalla del all-in-one parpadea constantemente.',                                   datetime('now', '-11 days'), datetime('now', '-11 days')),
-    (2, 9, 7, 2, 3, 2, 'Velocidad de red extremadamente lenta en piso 3.',                                datetime('now', '-10 days'), datetime('now', '-10 days')),
-    (3, 10, 3, 2, 2, 2, 'Usuario no puede acceder al módulo de vacaciones del HRMS.',                         datetime('now', '-9 days'),  datetime('now', '-9 days')),
-    (4, 11, NULL, 3, 1, 1, 'Resetear PIN de token físico de autenticación.',                                  datetime('now', '-8 days'),  datetime('now', '-8 days')),
-    (5, 12, 4, 3, 1, 5, 'Actualizar Office 365 a la última versión en equipo de auditoría.',                  datetime('now', '-7 days'),  datetime('now', '-4 days')),
-    (6, 13, NULL, 4, 2, 1, 'Necesito una etiquetadora portátil para el almacén.',                             datetime('now', '-7 days'),  datetime('now', '-7 days')),
-    (7, 14, 6, 4, 2, 3, 'VPN no levanta en macOS Sonoma después de actualización.',                           datetime('now', '-6 days'),  datetime('now', '-6 days')),
-    (8, 15, 5, 5, 2, 5, 'Impresora de credenciales no imprime con el nuevo cartucho.',                        datetime('now', '-6 days'),  datetime('now', '-3 days')),
-    (1, 16, 6, 6, 4, 3, 'Disco duro del servidor de respaldo emite ruido y falla SMART.',                     datetime('now', '-5 days'),  datetime('now', '-5 days')),
-    (2, 17, NULL, 6, 4, 1, 'Enlace de fibra óptica intermitente en rack principal.',                          datetime('now', '-5 days'),  datetime('now', '-5 days')),
-    (3, 18, 5, 5, 3, 3, 'Acceso SSH denegado al firewall perimetral.',                                        datetime('now', '-4 days'),  datetime('now', '-4 days')),
-    (4, 19, NULL, 1, 1, 1, 'Contraseña de nuevo ingreso no funciona en el primer acceso.',                    datetime('now', '-4 days'),  datetime('now', '-4 days')),
-    (5, 20, 4, 2, 1, 2, 'Instalar Slack en computadora de RRHH.',                                             datetime('now', '-3 days'),  datetime('now', '-3 days')),
-    (6, 21, NULL, 3, 2, 1, 'Solicitar licencia de AutoCAD para el área de proyectos.',                        datetime('now', '-3 days'),  datetime('now', '-3 days')),
-    (7, 7,  3, 1, 2, 3, 'VPN desconecta cada 30 minutos en conexión por celular.',                            datetime('now', '-2 days'),  datetime('now', '-2 days')),
-    (8, 8,  NULL, 1, 2, 1, 'Impresora de sala de juntas sin papel y sin tóner.',                              datetime('now', '-2 days'),  datetime('now', '-2 days')),
-    (1, 9,  NULL, 2, 3, 1, 'Mouse del equipo de reclutamiento no funciona.',                                  datetime('now', '-1 day'),   datetime('now', '-1 day')),
-    (2, 10, 6, 2, 3, 2, 'Red WiFi de sala de capacitación no aparece en dispositivos.',                       datetime('now', '-1 day'),   datetime('now', '-1 day')),
-    (3, 11, NULL, 3, 2, 1, 'Error al iniciar sesión en el sistema de facturación SAP.',                       datetime('now', '-1 day'),   datetime('now', '-1 day')),
-    (4, 12, 4, 3, 1, 3, 'Solicitar reseteo de contraseña del sistema de tesorería.',                          datetime('now', '-12 hours'), datetime('now', '-12 hours')),
-    (5, 13, NULL, 4, 1, 1, 'Instalar actualizaciones pendientes en equipo de logística.',                     datetime('now', '-10 hours'), datetime('now', '-10 hours')),
-    (6, 14, 5, 5, 2, 2, 'Solicitar cámara web HD para entrevistas remotas.',                                  datetime('now', '-8 hours'),  datetime('now', '-8 hours')),
-    (7, 15, NULL, 5, 3, 1, 'No puedo acceder a la VPN después del cambio de contraseña de AD.',               datetime('now', '-6 hours'),  datetime('now', '-6 hours')),
-    (8, 16, 6, 6, 4, 3, 'Impresora de centro de datos imprimiendo caracteres corruptos.',                     datetime('now', '-5 hours'),  datetime('now', '-5 hours')),
-    (1, 17, NULL, 6, 4, 1, 'UPS del rack C falla en prueba de autonomía.',                                    datetime('now', '-4 hours'),  datetime('now', '-4 hours')),
-    (2, 18, 5, 6, 4, 3, 'Switch de core dropping paquetes de forma intermitente.',                            datetime('now', '-3 hours'),  datetime('now', '-3 hours')),
-    (3, 19, NULL, 1, 2, 1, 'Cuenta de nuevo colaborador sin acceso a repositorio Git.',                       datetime('now', '-2 hours'),  datetime('now', '-2 hours')),
-    (4, 20, NULL, 2, 1, 1, 'Contraseña expirada en portal de beneficios.',                                    datetime('now', '-90 minutes'), datetime('now', '-90 minutes')),
-    (5, 21, 3, 3, 1, 2, 'Instalar drivers de impresora en equipo de contabilidad recién formateado.',         datetime('now', '-60 minutes'), datetime('now', '-60 minutes')),
-    (1, 7,  NULL, 1, 3, 1, 'Teclado mecánico derrama líquido, teclas pegadas.',                               datetime('now', '-45 minutes'), datetime('now', '-45 minutes')),
-    (2, 8,  6, 1, 4, 2, 'Servidor de correo no responde desde hace 20 minutos.',                              datetime('now', '-30 minutes'), datetime('now', '-30 minutes')),
-    (6, 9,  NULL, 2, 2, 1, 'Audífonos con micrófono para entrevistas por videollamada.',                      datetime('now', '-20 minutes'), datetime('now', '-20 minutes')),
-    (3, 10, NULL, 2, 2, 1, 'Bloqueo de cuenta por intento de acceso desde IP desconocida.',                   datetime('now', '-15 minutes'), datetime('now', '-15 minutes')),
-    (7, 11, NULL, 3, 2, 1, 'VPN empresarial no compatible con nuevo antivirus instalado por TI.',             datetime('now', '-10 minutes'), datetime('now', '-10 minutes')),
-    (8, 12, NULL, 3, 3, 1, 'Impresora fiscal desconfigura formato al imprimir desde Excel.',                  datetime('now', '-5 minutes'),  datetime('now', '-5 minutes'));
+    (7,  3,    3, 3, 'La laptop no enciende después de una actualización de BIOS.',                        datetime('now', '-28 days'), datetime('now', '-27 days')),
+    (8,  4,    3, 5, 'Sin acceso a internet en toda la planta baja desde el lunes.',                       datetime('now', '-26 days'), datetime('now', '-20 days')),
+    (9,  3,    2, 5, 'Usuario bloqueado en el sistema de nómina después de tres intentos fallidos.',        datetime('now', '-25 days'), datetime('now', '-22 days')),
+    (10, NULL, 1, 1, 'Restablecer contraseña de correo corporativo.',                                      datetime('now', '-24 days'), datetime('now', '-24 days')),
+    (11, 3,    1, 3, 'Instalar Adobe Acrobat Reader en el equipo de contabilidad.',                        datetime('now', '-23 days'), datetime('now', '-23 days')),
+    (12, NULL, 2, 1, 'Solicitar un segundo monitor para el puesto de análisis financiero.',                datetime('now', '-22 days'), datetime('now', '-22 days')),
+    (13, 7,    2, 2, 'No puede conectarse a VPN desde casa para acceder al ERP.',                          datetime('now', '-21 days'), datetime('now', '-21 days')),
+    (14, NULL, 2, 1, 'La impresora del almacén imprime páginas en blanco.',                                datetime('now', '-20 days'), datetime('now', '-19 days')),
+    (15, 5,    4, 2, 'El servidor de cámaras de seguridad no responde.',                                   datetime('now', '-19 days'), datetime('now', '-19 days')),
+    (16, 6,    4, 3, 'Caída total de la red en el datacenter secundario.',                                 datetime('now', '-18 days'), datetime('now', '-17 days')),
+    (17, 5,    3, 3, 'Acceso denegado al portal de administración de infraestructura.',                    datetime('now', '-17 days'), datetime('now', '-16 days')),
+    (18, NULL, 1, 1, 'Cambio de contraseña obligatorio expirado.',                                         datetime('now', '-16 days'), datetime('now', '-16 days')),
+    (19, 3,    1, 5, 'Instalar cliente VPN GlobalProtect en nuevo equipo.',                                datetime('now', '-15 days'), datetime('now', '-10 days')),
+    (20, 4,    2, 5, 'Teclado y ratón inalámbrico para trabajo remoto.',                                   datetime('now', '-14 days'), datetime('now', '-8 days')),
+    (21, NULL, 2, 1, 'VPN cae al intentar conectarse con token MFA.',                                      datetime('now', '-13 days'), datetime('now', '-13 days')),
+    (7,  3,    2, 4, 'Impresora de recepción no reconocida tras reinstalación de Windows.',                datetime('now', '-12 days'), datetime('now', '-11 days')),
+    (8,  4,    3, 3, 'Pantalla del all-in-one parpadea constantemente.',                                   datetime('now', '-11 days'), datetime('now', '-11 days')),
+    (9,  7,    3, 2, 'Velocidad de red extremadamente lenta en piso 3.',                                   datetime('now', '-10 days'), datetime('now', '-10 days')),
+    (10, 3,    2, 2, 'Usuario no puede acceder al módulo de vacaciones del HRMS.',                         datetime('now', '-9 days'),  datetime('now', '-9 days')),
+    (11, NULL, 1, 1, 'Resetear PIN de token físico de autenticación.',                                     datetime('now', '-8 days'),  datetime('now', '-8 days')),
+    (12, 4,    1, 5, 'Actualizar Office 365 a la última versión en equipo de auditoría.',                  datetime('now', '-7 days'),  datetime('now', '-4 days')),
+    (13, NULL, 2, 1, 'Necesito una etiquetadora portátil para el almacén.',                                datetime('now', '-7 days'),  datetime('now', '-7 days')),
+    (14, 6,    2, 3, 'VPN no levanta en macOS Sonoma después de actualización.',                           datetime('now', '-6 days'),  datetime('now', '-6 days')),
+    (15, 5,    2, 5, 'Impresora de credenciales no imprime con el nuevo cartucho.',                        datetime('now', '-6 days'),  datetime('now', '-3 days')),
+    (16, 6,    4, 3, 'Disco duro del servidor de respaldo emite ruido y falla SMART.',                     datetime('now', '-5 days'),  datetime('now', '-5 days')),
+    (17, NULL, 4, 1, 'Enlace de fibra óptica intermitente en rack principal.',                             datetime('now', '-5 days'),  datetime('now', '-5 days')),
+    (18, 5,    3, 3, 'Acceso SSH denegado al firewall perimetral.',                                        datetime('now', '-4 days'),  datetime('now', '-4 days')),
+    (19, NULL, 1, 1, 'Contraseña de nuevo ingreso no funciona en el primer acceso.',                       datetime('now', '-4 days'),  datetime('now', '-4 days')),
+    (20, 4,    1, 2, 'Instalar Slack en computadora de RRHH.',                                             datetime('now', '-3 days'),  datetime('now', '-3 days')),
+    (21, NULL, 2, 1, 'Solicitar licencia de AutoCAD para el área de proyectos.',                           datetime('now', '-3 days'),  datetime('now', '-3 days')),
+    (7,  3,    2, 3, 'VPN desconecta cada 30 minutos en conexión por celular.',                            datetime('now', '-2 days'),  datetime('now', '-2 days')),
+    (8,  NULL, 2, 1, 'Impresora de sala de juntas sin papel y sin tóner.',                                 datetime('now', '-2 days'),  datetime('now', '-2 days')),
+    (9,  NULL, 3, 1, 'Mouse del equipo de reclutamiento no funciona.',                                     datetime('now', '-1 day'),   datetime('now', '-1 day')),
+    (10, 6,    3, 2, 'Red WiFi de sala de capacitación no aparece en dispositivos.',                       datetime('now', '-1 day'),   datetime('now', '-1 day')),
+    (11, NULL, 2, 1, 'Error al iniciar sesión en el sistema de facturación SAP.',                          datetime('now', '-1 day'),   datetime('now', '-1 day')),
+    (12, 4,    1, 3, 'Solicitar reseteo de contraseña del sistema de tesorería.',                          datetime('now', '-12 hours'), datetime('now', '-12 hours')),
+    (13, NULL, 1, 1, 'Instalar actualizaciones pendientes en equipo de logística.',                        datetime('now', '-10 hours'), datetime('now', '-10 hours')),
+    (14, 5,    2, 2, 'Solicitar cámara web HD para entrevistas remotas.',                                  datetime('now', '-8 hours'),  datetime('now', '-8 hours')),
+    (15, NULL, 3, 1, 'No puedo acceder a la VPN después del cambio de contraseña de AD.',                  datetime('now', '-6 hours'),  datetime('now', '-6 hours')),
+    (16, 6,    4, 3, 'Impresora de centro de datos imprimiendo caracteres corruptos.',                     datetime('now', '-5 hours'),  datetime('now', '-5 hours')),
+    (17, NULL, 4, 1, 'UPS del rack C falla en prueba de autonomía.',                                       datetime('now', '-4 hours'),  datetime('now', '-4 hours')),
+    (18, 5,    4, 3, 'Switch de core dropping paquetes de forma intermitente.',                            datetime('now', '-3 hours'),  datetime('now', '-3 hours')),
+    (19, NULL, 2, 1, 'Cuenta de nuevo colaborador sin acceso a repositorio Git.',                          datetime('now', '-2 hours'),  datetime('now', '-2 hours')),
+    (20, NULL, 1, 1, 'Contraseña expirada en portal de beneficios.',                                       datetime('now', '-90 minutes'), datetime('now', '-90 minutes')),
+    (21, 3,    1, 2, 'Instalar drivers de impresora en equipo de contabilidad recién formateado.',         datetime('now', '-60 minutes'), datetime('now', '-60 minutes')),
+    (7,  NULL, 3, 1, 'Teclado mecánico derrama líquido, teclas pegadas.',                                  datetime('now', '-45 minutes'), datetime('now', '-45 minutes')),
+    (8,  6,    4, 2, 'Servidor de correo no responde desde hace 20 minutos.',                              datetime('now', '-30 minutes'), datetime('now', '-30 minutes')),
+    (9,  NULL, 2, 1, 'Audífonos con micrófono para entrevistas por videollamada.',                         datetime('now', '-20 minutes'), datetime('now', '-20 minutes')),
+    (10, NULL, 2, 1, 'Bloqueo de cuenta por intento de acceso desde IP desconocida.',                      datetime('now', '-15 minutes'), datetime('now', '-15 minutes')),
+    (11, NULL, 2, 1, 'VPN empresarial no compatible con nuevo antivirus instalado por TI.',                datetime('now', '-10 minutes'), datetime('now', '-10 minutes')),
+    (12, NULL, 3, 1, 'Impresora fiscal desconfigura formato al imprimir desde Excel.',                     datetime('now', '-5 minutes'),  datetime('now', '-5 minutes'));
 
 INSERT INTO helpdesk_ticket_activity
     (ticket_id, profile_id, kind, body, metadata, created_at)

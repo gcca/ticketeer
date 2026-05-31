@@ -1,0 +1,139 @@
+<%c++
+  using Row = std::map<std::string, std::string>;
+  using Rows = std::vector<Row>;
+  auto& default_status_id = std::any_cast<std::string&>(@@["default_status_id"]);
+  auto& assigned_status_id = std::any_cast<std::string&>(@@["assigned_status_id"]);
+  auto& default_assigned_to_id = std::any_cast<std::string&>(@@["default_assigned_to_id"]);
+  auto& default_ticket_priority_id = std::any_cast<std::string&>(@@["default_ticket_priority_id"]);
+  auto& system_profile_id = std::any_cast<std::string&>(@@["system_profile_id"]);
+  auto& ticket_body_maxlength = std::any_cast<std::string&>(@@["ticket_body_maxlength"]);
+  auto& ticket_activity_body_maxlength = std::any_cast<std::string&>(@@["ticket_activity_body_maxlength"]);
+  auto& ticket_due_delta = std::any_cast<std::string&>(@@["ticket_due_delta"]);
+  auto& statuses = std::any_cast<Rows&>(@@["statuses"]);
+  auto& assignees = std::any_cast<Rows&>(@@["assignees"]);
+  auto& priorities = std::any_cast<Rows&>(@@["priorities"]);
+  auto& profiles = std::any_cast<Rows&>(@@["profiles"]);
+  auto& o = supervisor_config_settings_tmp_stream;
+%>
+<div>
+  <div class="mb-6">
+    <h1 class="text-3xl font-bold">Configuración</h1>
+    <p class="mt-1 text-sm opacity-60">Ajustes generales del sistema</p>
+  </div>
+
+  <form class="rounded-lg bg-base-100 p-6 shadow"
+        hx-post="/ticketeer/supervisor/config/settings/save"
+        hx-target="#main-content"
+        hx-swap="innerHTML"
+        hx-push-url="?t=config-settings">
+
+    <div class="grid gap-6 lg:grid-cols-2">
+
+      <label class="form-control w-full">
+        <div class="label pb-1">
+          <span class="label-text text-xs font-semibold uppercase opacity-60">Estado por defecto</span>
+        </div>
+        <select name="default_status_id" class="select select-bordered w-full" required>
+          <option value="" disabled<%c++ if (default_status_id.empty()) { o << " selected"; } %>>Selecciona un estado</option>
+<%c++ for (const auto& s : statuses) { %>
+          <option value="<%c++ o << s.at("id"); %>"<%c++ if (s.at("id") == default_status_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(s.at("name")); %></option>
+<%c++ } %>
+        </select>
+      </label>
+
+      <label class="form-control w-full">
+        <div class="label pb-1">
+          <span class="label-text text-xs font-semibold uppercase opacity-60">Estado al asignar</span>
+        </div>
+        <select name="assigned_status_id" class="select select-bordered w-full" required>
+          <option value="" disabled<%c++ if (assigned_status_id.empty()) { o << " selected"; } %>>Selecciona un estado</option>
+<%c++ for (const auto& s : statuses) { %>
+          <option value="<%c++ o << s.at("id"); %>"<%c++ if (s.at("id") == assigned_status_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(s.at("name")); %></option>
+<%c++ } %>
+        </select>
+      </label>
+
+      <label class="form-control w-full">
+        <div class="label pb-1">
+          <span class="label-text text-xs font-semibold uppercase opacity-60">Asignado por defecto</span>
+        </div>
+        <select name="default_assigned_to_id" class="select select-bordered w-full" required>
+          <option value="" disabled<%c++ if (default_assigned_to_id.empty()) { o << " selected"; } %>>Selecciona un perfil</option>
+<%c++ for (const auto& a : assignees) { %>
+          <option value="<%c++ o << a.at("id"); %>"<%c++ if (a.at("id") == default_assigned_to_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("name")); %></option>
+<%c++ } %>
+        </select>
+      </label>
+
+      <label class="form-control w-full">
+        <div class="label pb-1">
+          <span class="label-text text-xs font-semibold uppercase opacity-60">Prioridad por defecto</span>
+        </div>
+        <select name="default_ticket_priority_id" class="select select-bordered w-full" required>
+          <option value="" disabled<%c++ if (default_ticket_priority_id.empty()) { o << " selected"; } %>>Selecciona una prioridad</option>
+<%c++ for (const auto& p : priorities) { %>
+          <option value="<%c++ o << p.at("id"); %>"<%c++ if (p.at("id") == default_ticket_priority_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(p.at("name")); %></option>
+<%c++ } %>
+        </select>
+      </label>
+
+      <label class="form-control w-full">
+        <div class="label pb-1">
+          <span class="label-text text-xs font-semibold uppercase opacity-60">Perfil del sistema</span>
+        </div>
+        <select name="system_profile_id" class="select select-bordered w-full" required>
+          <option value="" disabled<%c++ if (system_profile_id.empty()) { o << " selected"; } %>>Selecciona un perfil</option>
+<%c++ for (const auto& p : profiles) { %>
+          <option value="<%c++ o << p.at("id"); %>"<%c++ if (p.at("id") == system_profile_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(p.at("name")); %></option>
+<%c++ } %>
+        </select>
+      </label>
+
+      <label class="form-control w-full max-w-xs">
+        <div class="label pb-1">
+          <span class="label-text text-xs font-semibold uppercase opacity-60">Máximo de caracteres en detalle del ticket</span>
+        </div>
+        <input type="number"
+               name="ticket_body_maxlength"
+               class="input input-bordered w-full"
+               min="1"
+               value="<%c++ o << drogon::HttpViewData::htmlTranslate(ticket_body_maxlength); %>"
+               required />
+      </label>
+
+      <label class="form-control w-full max-w-xs">
+        <div class="label pb-1">
+          <span class="label-text text-xs font-semibold uppercase opacity-60">Máximo de caracteres en actividad</span>
+        </div>
+        <input type="number"
+               name="ticket_activity_body_maxlength"
+               class="input input-bordered w-full"
+               min="1"
+               value="<%c++ o << drogon::HttpViewData::htmlTranslate(ticket_activity_body_maxlength); %>"
+               required />
+      </label>
+
+      <label class="form-control w-full max-w-xs">
+        <div class="label pb-1">
+          <span class="label-text text-xs font-semibold uppercase opacity-60">Tiempo límite por defecto (segundos)</span>
+        </div>
+        <input type="number"
+               name="ticket_due_delta"
+               class="input input-bordered w-full"
+               min="1"
+               value="<%c++ o << drogon::HttpViewData::htmlTranslate(ticket_due_delta); %>"
+               required />
+      </label>
+
+    </div>
+
+    <div class="mt-6 flex justify-end border-t border-base-300 pt-4">
+      <button type="submit" class="btn btn-primary">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-4 w-4">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+        Guardar
+      </button>
+    </div>
+  </form>
+</div>

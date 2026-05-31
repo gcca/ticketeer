@@ -21,22 +21,48 @@
           btn.querySelector('svg').classList.toggle('invisible', btn.dataset.themeBtn !== name);
         });
       }
+      function ticketeerSelectAssignedTo(btn, value) {
+        const form = btn.closest('form');
+        const input = form.querySelector('input[name="new_assigned_to"]');
+        input.value = value;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        btn.blur();
+      }
       document.addEventListener('DOMContentLoaded', function () {
         const saved = localStorage.getItem('theme');
         if (saved) setTheme(saved);
         const params = new URLSearchParams(window.location.search);
         const modules = {
-          tickets: '/ticketeer/supervisor/ticket/list'
+          tickets: '/ticketeer/supervisor/ticket/list',
+          'config-ticket-status': '/ticketeer/supervisor/config/ticket-status/list',
+          'config-ticket-priority': '/ticketeer/supervisor/config/ticket-priority/list',
+          'config-settings': '/ticketeer/supervisor/config/settings'
         };
-        const ticketId = params.get('i');
+        const ticketFilterKeys = ['s', 'requester_id', 'status_id', 'priority_id', 'assigned_to_id', 'sort', 'dir'];
+        const requestedModule = params.get('t') || 'tickets';
+        const currentModule = modules[requestedModule] ? requestedModule : 'tickets';
+        document.querySelectorAll('[data-module-link]').forEach(function(link) {
+          link.classList.toggle('active', link.dataset.moduleLink === currentModule);
+        });
+        const ticketId = currentModule === 'tickets' ? params.get('i') : null;
         if (ticketId) {
           htmx.ajax('GET', '/ticketeer/supervisor/ticket/' + ticketId + '/details', {
             target: '#main-content',
             swap: 'innerHTML'
           });
         } else {
-          const s = params.get('s');
-          const moduleUrl = (modules[params.get('t')] || modules.tickets) + (s ? '?s=' + encodeURIComponent(s) : '');
+          const moduleParams = new URLSearchParams();
+          if (currentModule === 'tickets') {
+            ticketFilterKeys.forEach(function(key) {
+              const value = params.get(key);
+              if (value) moduleParams.set(key, value);
+            });
+            if (params.get('p')) moduleParams.set('p', params.get('p'));
+          }
+          if (currentModule === 'config-ticket-status' && params.get('ts')) moduleParams.set('ts', params.get('ts'));
+          if (currentModule === 'config-ticket-priority' && params.get('tp')) moduleParams.set('tp', params.get('tp'));
+          const query = moduleParams.toString();
+          const moduleUrl = modules[currentModule] + (query ? '?' + query : '');
           htmx.ajax('GET', moduleUrl, {
             target: '#main-content',
             swap: 'innerHTML'
@@ -45,14 +71,53 @@
         document.body.addEventListener('pointerdown', function (evt) {
           const el = evt.target.closest('[hx-push-url]');
           if (!el) return;
-          const s = new URLSearchParams(window.location.search).get('s');
+          const currentParams = new URLSearchParams(window.location.search);
           const pu = el.getAttribute('hx-push-url') || '';
           const pp = new URLSearchParams(pu.replace(/^\?/, ''));
-          s ? pp.set('s', s) : pp.delete('s');
+          const targetModule = pp.get('t') || new URLSearchParams(window.location.search).get('t') || 'tickets';
+          if (targetModule === 'tickets' || pp.has('i')) {
+            ticketFilterKeys.forEach(function(key) {
+              const value = currentParams.get(key);
+              if (!pp.has(key)) {
+                value ? pp.set(key, value) : pp.delete(key);
+              }
+            });
+            if (!pp.has('p')) {
+              const page = currentParams.get('p');
+              page ? pp.set('p', page) : pp.delete('p');
+            }
+          } else {
+            ticketFilterKeys.forEach(function(key) { pp.delete(key); });
+            pp.delete('p');
+          }
+          if (targetModule !== 'config-ticket-status') pp.delete('ts');
+          if (targetModule !== 'config-ticket-priority') pp.delete('tp');
           el.setAttribute('hx-push-url', '?' + pp.toString());
-          const base = (el.getAttribute('hx-get') || '').split('?')[0];
-          if (base.endsWith('/ticket/list'))
-            el.setAttribute('hx-get', s ? base + '?s=' + encodeURIComponent(s) : base);
+          const hxGet = el.getAttribute('hx-get') || '';
+          const parts = hxGet.split('?');
+          const base = parts[0];
+          if (base.endsWith('/ticket/list')) {
+            const qp = new URLSearchParams(parts[1] || '');
+            ticketFilterKeys.forEach(function(key) {
+              const value = currentParams.get(key);
+              if (!qp.has(key)) {
+                value ? qp.set(key, value) : qp.delete(key);
+              }
+            });
+            if (!qp.has('p')) {
+              const page = currentParams.get('p');
+              page ? qp.set('p', page) : qp.delete('p');
+            }
+            const query = qp.toString();
+            el.setAttribute('hx-get', query ? base + '?' + query : base);
+          }
+        });
+        document.body.addEventListener('click', function (evt) {
+          const link = evt.target.closest('[data-module-link]');
+          if (!link) return;
+          document.querySelectorAll('[data-module-link]').forEach(function(item) {
+            item.classList.toggle('active', item === link);
+          });
         });
       });
     </script>
@@ -90,6 +155,7 @@
             <ul class="menu gap-1">
               <li>
                 <a class="active"
+                   data-module-link="tickets"
                    hx-get="/ticketeer/supervisor/ticket/list"
                    hx-target="#main-content"
                    hx-swap="innerHTML"
@@ -98,6 +164,46 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z" />
                   </svg>
                   Tickets
+                </a>
+              </li>
+              <li>
+                <a data-module-link="config-ticket-status"
+                   hx-get="/ticketeer/supervisor/config/ticket-status/list"
+                   hx-target="#main-content"
+                   hx-swap="innerHTML"
+                   hx-push-url="?t=config-ticket-status">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                  </svg>
+                  Estado
+                </a>
+              </li>
+              <li>
+                <a data-module-link="config-ticket-priority"
+                   hx-get="/ticketeer/supervisor/config/ticket-priority/list"
+                   hx-target="#main-content"
+                   hx-swap="innerHTML"
+                   hx-push-url="?t=config-ticket-priority">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" />
+                  </svg>
+                  Prioridad
+                </a>
+              </li>
+
+              <div class="divider my-2"></div>
+
+              <li>
+                <a data-module-link="config-settings"
+                   hx-get="/ticketeer/supervisor/config/settings"
+                   hx-target="#main-content"
+                   hx-swap="innerHTML"
+                   hx-push-url="?t=config-settings">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                  </svg>
+                  Configuración
                 </a>
               </li>
             </ul>

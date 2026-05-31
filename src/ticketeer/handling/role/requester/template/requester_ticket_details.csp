@@ -4,6 +4,7 @@
   auto& ticket = std::any_cast<Row&>(@@["ticket"]);
   auto& activities = std::any_cast<Rows&>(@@["activities"]);
   auto& attachments = std::any_cast<Rows&>(@@["attachments"]);
+  auto& activity_body_maxlength = std::any_cast<std::string&>(@@["activity_body_maxlength"]);
   auto& o = requester_ticket_details_tmp_stream;
 %>
 <div>
@@ -27,8 +28,8 @@
     <div class="lg:col-span-2 space-y-6">
       <div class="card bg-base-100 shadow">
         <div class="card-body">
-          <h2 class="card-title text-base">Descripción</h2>
-          <p class="text-sm leading-relaxed"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("description")); %></p>
+          <h2 class="card-title text-base">Detalle</h2>
+          <p class="text-sm leading-relaxed"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("body")); %></p>
         </div>
       </div>
 
@@ -77,18 +78,37 @@
 <%c++ } %>
           </div>
 
+<%c++ if (ticket.at("status_trait") == "closed") { %>
+          <div class="flex flex-col gap-2 pt-2 border-t border-base-300 sm:flex-row sm:items-start opacity-50">
+            <div class="flex flex-1 flex-col gap-1">
+              <input type="text"
+                     placeholder="Escribe un mensaje..."
+                     class="input input-bordered input-sm w-full"
+                     disabled />
+            </div>
+            <div class="tooltip tooltip-left sm:self-start" data-tip="Ticket cerrado">
+              <button type="button" class="btn btn-primary btn-sm" disabled>Enviar</button>
+            </div>
+          </div>
+<%c++ } else { %>
           <form hx-post="/ticketeer/requester/ticket/<%c++ o << ticket.at("id"); %>/activity/create/message"
                 hx-target="#activities"
                 hx-swap="beforeend"
-                hx-on::after-request="this.reset()"
-                class="flex gap-2 pt-2 border-t border-base-300">
-            <input type="text"
-                   name="message"
-                   placeholder="Escribe un mensaje..."
-                   class="input input-bordered input-sm flex-1"
-                   required />
-            <button type="submit" class="btn btn-primary btn-sm">Enviar</button>
+                hx-on::after-request="this.reset(); document.getElementById('requester-activity-body-counter').textContent = '0/<%c++ o << activity_body_maxlength; %>'"
+                class="flex flex-col gap-2 pt-2 border-t border-base-300 sm:flex-row sm:items-start">
+            <div class="flex flex-1 flex-col gap-1">
+              <input type="text"
+                     name="message"
+                     placeholder="Escribe un mensaje..."
+                     class="input input-bordered input-sm w-full"
+                     maxlength="<%c++ o << activity_body_maxlength; %>"
+                     oninput="document.getElementById('requester-activity-body-counter').textContent = this.value.length + '/<%c++ o << activity_body_maxlength; %>'"
+                     required />
+              <span class="self-end text-xs opacity-60" id="requester-activity-body-counter">0/<%c++ o << activity_body_maxlength; %></span>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm sm:self-start">Enviar</button>
           </form>
+<%c++ } %>
         </div>
       </div>
     </div>
@@ -98,18 +118,6 @@
         <div class="card-body gap-3">
           <h2 class="card-title text-base">Detalles</h2>
           <div class="space-y-2 text-sm">
-            <div class="flex justify-between gap-3">
-              <span class="shrink-0 opacity-60">Tipo</span>
-              <div class="tooltip tooltip-left min-w-0" data-tip="<%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("request_type_display")); %>">
-                <span class="block truncate text-right font-medium"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("request_type_display")); %></span>
-              </div>
-            </div>
-            <div class="flex justify-between gap-3">
-              <span class="shrink-0 opacity-60">Departamento</span>
-              <div class="tooltip tooltip-left min-w-0" data-tip="<%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("department_name")); %>">
-                <span class="block truncate text-right font-medium"><%c++ o << drogon::HttpViewData::htmlTranslate(ticket.at("department_name")); %></span>
-              </div>
-            </div>
             <div class="flex justify-between gap-3">
 <%c++ const auto& assigned = ticket.at("assigned_to_name").empty() ? "Sin asignar" : ticket.at("assigned_to_name"); %>
               <span class="shrink-0 opacity-60">Asignado a</span>

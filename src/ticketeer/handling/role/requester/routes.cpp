@@ -4,6 +4,7 @@
 #include <fstream>
 #include <map>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -22,6 +23,8 @@ using Callback = std::function<void(const drogon::HttpResponsePtr &)>;
 using Row = std::map<std::string, std::string>;
 using Rows = std::vector<Row>;
 
+inline constexpr int TicketPageSize = 9;
+
 struct Profile {
   std::string id;
   std::string username;
@@ -29,10 +32,16 @@ struct Profile {
 };
 
 struct TicketCreateInput {
-  std::string request_type_id;
-  std::string department_id;
   std::string priority_id;
-  std::string description;
+  std::string body;
+};
+
+struct TicketFilters {
+  std::string search;
+  std::string status_id;
+  std::string priority_id;
+  std::string sort;
+  std::string sort_dir;
 };
 
 inline void BadRequest(const Callback &callback, const char *msg,
@@ -46,6 +55,58 @@ inline void BadRequest(const Callback &callback, const char *msg,
 [[nodiscard]] inline std::string ColumnText(sqlite3_stmt *stmt, int i) {
   const auto *v = sqlite3_column_text(stmt, i);
   return v ? reinterpret_cast<const char *>(v) : "";
+}
+
+[[nodiscard]] inline int ParsePage(const std::string &value) {
+  if (value.empty())
+    return 1;
+  int page = 0;
+  for (const char ch : value) {
+    if (ch < '0' || ch > '9')
+      return 1;
+    if (page > 100000)
+      return 1;
+    page = page * 10 + (ch - '0');
+    if (page > 1000000)
+      return 1;
+  }
+  return page > 0 ? page : 1;
+}
+
+[[nodiscard]] inline int PageCount(const int total_count) {
+  return total_count > 0 ? (total_count + TicketPageSize - 1) / TicketPageSize
+                         : 1;
+}
+
+[[nodiscard]] inline int ClampPage(const int page, const int page_count) {
+  if (page < 1)
+    return 1;
+  if (page > page_count)
+    return page_count;
+  return page;
+}
+
+[[nodiscard]] inline std::string NormalizeTicketSort(std::string_view sort) {
+  if (sort == "body" || sort == "status" || sort == "priority" ||
+      sort == "created_at" || sort == "updated_at")
+    return std::string(sort);
+  return "created_at";
+}
+
+[[nodiscard]] inline std::string NormalizeSortDir(std::string_view dir) {
+  return dir == "asc" ? "asc" : "desc";
+}
+
+[[nodiscard]] inline const char *TicketSortExpression(const std::string &sort) {
+  if (sort == "body")
+    return "t.body COLLATE NOCASE";
+  if (sort == "status")
+    return "ts.display_name COLLATE NOCASE";
+  if (sort == "priority")
+    return "p.display_name COLLATE NOCASE";
+  if (sort == "updated_at")
+    return "t.updated_at";
+  return "t.created_at";
 }
 
 [[nodiscard]] inline sqlite3 *ConnectDB() {
@@ -110,35 +171,6 @@ SELECT p.id, u.username, u.name
   return rows;
 }
 
-[[nodiscard]] inline Rows FetchRequestTypes(quill::Logger *logger,
-                                            sqlite3 *db) {
-  sqlite3_stmt *stmt = nullptr;
-  if (sqlite3_prepare_v2(db,
-                         "SELECT id, name, description FROM "
-                         "helpdesk_request_type ORDER BY name",
-                         -1, &stmt, nullptr) != SQLITE_OK) {
-    LOGJ_DEBUG(logger, "[requester] request type list query error",
-               sqlite3_errmsg(db));
-    return {};
-  }
-
-  Rows rows;
-  while (sqlite3_step(stmt) == SQLITE_ROW)
-    rows.push_back({{"id", ColumnText(stmt, 0)},
-                    {"name", ColumnText(stmt, 1)},
-                    {"description", ColumnText(stmt, 2)}});
-
-  sqlite3_finalize(stmt);
-  return rows;
-}
-
-[[nodiscard]] inline Rows FetchDepartments(quill::Logger *logger, sqlite3 *db) {
-  return FetchLookupRows(logger, db,
-                         "SELECT id, name FROM helpdesk_department ORDER BY "
-                         "name",
-                         "[requester] department list query error");
-}
-
 [[nodiscard]] inline Rows FetchPriorities(quill::Logger *logger, sqlite3 *db) {
   return FetchLookupRows(logger, db,
                          "SELECT id, display_name FROM helpdesk_priority ORDER "
@@ -146,46 +178,142 @@ SELECT p.id, u.username, u.name
                          "[requester] priority list query error");
 }
 
+[[nodiscard]] inline Rows FetchStatuses(quill::Logger *logger, sqlite3 *db) {
+  return FetchLookupRows(logger, db,
+                         "SELECT id, display_name FROM "
+                         "helpdesk_ticket_status ORDER BY id",
+                         "[requester] status list query error");
+}
+
 [[nodiscard]] inline Rows FetchTickets(quill::Logger *logger, sqlite3 *db,
                                        const std::string &profile_id,
-                                       const std::string &search) {
+                                       const TicketFilters &filters,
+                                       const int page) {
   sqlite3_stmt *stmt = nullptr;
   std::string sql = R"SQL(
-SELECT t.id, t.description, ts.display_name, p.display_name,
-       COALESCE(NULLIF(rt.description, ''), rt.name), t.created_at
+SELECT t.id, t.body, ts.display_name, p.display_name,
+       strftime('%Y-%m-%d %H:%M:%S', datetime(t.created_at, '-5 hours')),
+       strftime('%Y-%m-%d %H:%M:%S', datetime(t.updated_at, '-5 hours'))
   FROM helpdesk_ticket t
   JOIN helpdesk_ticket_status ts ON ts.id = t.status_id
   JOIN helpdesk_priority p       ON p.id  = t.priority_id
-  JOIN helpdesk_request_type rt  ON rt.id = t.request_type_id
  WHERE t.requester_id = ?
 )SQL";
-  if (!search.empty())
-    sql += " AND t.description LIKE ?";
-  sql += " ORDER BY t.created_at DESC";
+  std::vector<std::string> values;
+  if (!filters.search.empty()) {
+    sql += " AND t.body LIKE ?";
+    values.push_back("%" + filters.search + "%");
+  }
+  if (!filters.status_id.empty()) {
+    sql += " AND t.status_id = ?";
+    values.push_back(filters.status_id);
+  }
+  if (!filters.priority_id.empty()) {
+    sql += " AND t.priority_id = ?";
+    values.push_back(filters.priority_id);
+  }
+  sql += " ORDER BY ";
+  sql += TicketSortExpression(filters.sort);
+  sql += filters.sort_dir == "asc" ? " ASC" : " DESC";
+  sql += ", t.id DESC LIMIT ? OFFSET ?";
 
   if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
     LOGJ_DEBUG(logger, "[requester] ticket list query error",
                sqlite3_errmsg(db));
     return {};
   }
-  sqlite3_bind_text(stmt, 1, profile_id.c_str(), -1, SQLITE_STATIC);
-  std::string like_search;
-  if (!search.empty()) {
-    like_search = "%" + search + "%";
-    sqlite3_bind_text(stmt, 2, like_search.c_str(), -1, SQLITE_STATIC);
-  }
+  int bind_idx = 1;
+  sqlite3_bind_text(stmt, bind_idx++, profile_id.c_str(), -1, SQLITE_STATIC);
+  for (const auto &value : values)
+    sqlite3_bind_text(stmt, bind_idx++, value.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, bind_idx++, TicketPageSize);
+  sqlite3_bind_int(stmt, bind_idx++, (page - 1) * TicketPageSize);
 
   Rows tickets;
   while (sqlite3_step(stmt) == SQLITE_ROW) {
     tickets.push_back({{"id", ColumnText(stmt, 0)},
-                       {"description", ColumnText(stmt, 1)},
+                       {"body", ColumnText(stmt, 1)},
                        {"status_name", ColumnText(stmt, 2)},
                        {"priority_name", ColumnText(stmt, 3)},
-                       {"request_type_display", ColumnText(stmt, 4)},
-                       {"created_at", ColumnText(stmt, 5)}});
+                       {"created_at", ColumnText(stmt, 4)},
+                       {"updated_at", ColumnText(stmt, 5)}});
   }
   sqlite3_finalize(stmt);
   return tickets;
+}
+
+[[nodiscard]] inline int CountTickets(quill::Logger *logger, sqlite3 *db,
+                                      const std::string &profile_id,
+                                      const TicketFilters &filters) {
+  sqlite3_stmt *stmt = nullptr;
+  std::string sql = "SELECT COUNT(*) FROM helpdesk_ticket t "
+                    "WHERE t.requester_id = ?";
+  std::vector<std::string> values;
+  if (!filters.search.empty()) {
+    sql += " AND t.body LIKE ?";
+    values.push_back("%" + filters.search + "%");
+  }
+  if (!filters.status_id.empty()) {
+    sql += " AND t.status_id = ?";
+    values.push_back(filters.status_id);
+  }
+  if (!filters.priority_id.empty()) {
+    sql += " AND t.priority_id = ?";
+    values.push_back(filters.priority_id);
+  }
+
+  if (sqlite3_prepare_v2(db, sql.c_str(), -1, &stmt, nullptr) != SQLITE_OK) {
+    LOGJ_DEBUG(logger, "[requester] ticket count query error",
+               sqlite3_errmsg(db));
+    return 0;
+  }
+
+  int bind_idx = 1;
+  sqlite3_bind_text(stmt, bind_idx++, profile_id.c_str(), -1, SQLITE_STATIC);
+  for (const auto &value : values)
+    sqlite3_bind_text(stmt, bind_idx++, value.c_str(), -1, SQLITE_STATIC);
+
+  int total_count = 0;
+  if (sqlite3_step(stmt) == SQLITE_ROW)
+    total_count = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+  return total_count;
+}
+
+[[nodiscard]] inline drogon::HttpViewData
+BuildTicketListData(quill::Logger *logger, sqlite3 *db,
+                    const std::string &profile_id,
+                    const TicketFilters &filters,
+                    const int requested_page) {
+  TicketFilters normalized_filters = filters;
+  normalized_filters.sort = NormalizeTicketSort(filters.sort);
+  normalized_filters.sort_dir = NormalizeSortDir(filters.sort_dir);
+
+  const int total_count = CountTickets(logger, db, profile_id,
+                                       normalized_filters);
+  const int page_count = PageCount(total_count);
+  const int page = ClampPage(requested_page, page_count);
+  auto tickets = FetchTickets(logger, db, profile_id, normalized_filters,
+                              page);
+  auto statuses = FetchStatuses(logger, db);
+  auto priorities = FetchPriorities(logger, db);
+
+  drogon::HttpViewData data;
+  data.insert("tickets", tickets);
+  data.insert("search", normalized_filters.search);
+  data.insert("status_id", normalized_filters.status_id);
+  data.insert("priority_id", normalized_filters.priority_id);
+  data.insert("sort", normalized_filters.sort);
+  data.insert("dir", normalized_filters.sort_dir);
+  data.insert("statuses", statuses);
+  data.insert("priorities", priorities);
+  data.insert("page", std::to_string(page));
+  data.insert("page_count", std::to_string(page_count));
+  data.insert("prev_page", std::to_string(page > 1 ? page - 1 : 1));
+  data.insert("next_page",
+              std::to_string(page < page_count ? page + 1 : page_count));
+  data.insert("total_count", std::to_string(total_count));
+  return data;
 }
 
 [[nodiscard]] inline std::optional<Row>
@@ -194,15 +322,13 @@ FetchTicketDetails(quill::Logger *logger, sqlite3 *db,
                    const std::string &profile_id) {
   sqlite3_stmt *stmt = nullptr;
   const char *sql = R"SQL(
-SELECT t.id, t.description, ts.display_name, p.display_name,
-       COALESCE(NULLIF(rt.description, ''), rt.name), d.name,
-       t.created_at, COALESCE(t.due_date, ''),
-       COALESCE(au.name, '') AS assigned_to_name
+SELECT t.id, t.body, ts.display_name, p.display_name,
+       strftime('%Y-%m-%d %H:%M:%S', datetime(t.created_at, '-5 hours')),
+       COALESCE(t.due_date, ''),
+       COALESCE(au.name, '') AS assigned_to_name, ts.trait
   FROM helpdesk_ticket t
   JOIN helpdesk_ticket_status ts ON ts.id = t.status_id
   JOIN helpdesk_priority p       ON p.id  = t.priority_id
-  JOIN helpdesk_request_type rt  ON rt.id = t.request_type_id
-  JOIN helpdesk_department d     ON d.id  = t.department_id
   LEFT JOIN helpdesk_profile ap  ON ap.id = t.assigned_to_id
   LEFT JOIN auth_user au         ON au.id = ap.user_id
  WHERE t.id = ?
@@ -221,17 +347,40 @@ SELECT t.id, t.description, ts.display_name, p.display_name,
   std::optional<Row> ticket;
   if (sqlite3_step(stmt) == SQLITE_ROW) {
     ticket = Row{{"id", ColumnText(stmt, 0)},
-                 {"description", ColumnText(stmt, 1)},
+                 {"body", ColumnText(stmt, 1)},
                  {"status_name", ColumnText(stmt, 2)},
                  {"priority_name", ColumnText(stmt, 3)},
-                 {"request_type_display", ColumnText(stmt, 4)},
-                 {"department_name", ColumnText(stmt, 5)},
-                 {"created_at", ColumnText(stmt, 6)},
-                 {"due_date", ColumnText(stmt, 7)},
-                 {"assigned_to_name", ColumnText(stmt, 8)}};
+                 {"created_at", ColumnText(stmt, 4)},
+                 {"due_date", ColumnText(stmt, 5)},
+                 {"assigned_to_name", ColumnText(stmt, 6)},
+                 {"status_trait", ColumnText(stmt, 7)}};
   }
   sqlite3_finalize(stmt);
   return ticket;
+}
+
+[[nodiscard]] inline std::optional<std::string>
+FetchTicketTraitForRequester(quill::Logger *logger, sqlite3 *db,
+                              const std::string &ticket_id,
+                              const std::string &profile_id) {
+  sqlite3_stmt *stmt = nullptr;
+  const char *sql = R"SQL(
+SELECT ts.trait
+  FROM helpdesk_ticket t
+  JOIN helpdesk_ticket_status ts ON ts.id = t.status_id
+ WHERE t.id = ?
+   AND t.requester_id = ?
+ LIMIT 1
+)SQL";
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK)
+    return std::nullopt;
+  sqlite3_bind_text(stmt, 1, ticket_id.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, profile_id.c_str(), -1, SQLITE_STATIC);
+  std::optional<std::string> trait;
+  if (sqlite3_step(stmt) == SQLITE_ROW)
+    trait = ColumnText(stmt, 0);
+  sqlite3_finalize(stmt);
+  return trait;
 }
 
 inline constexpr std::size_t MaxActivityAttachmentSize = 25UL * 1024 * 1024;
@@ -383,7 +532,9 @@ SELECT 1
                                           const std::string &ticket_id) {
   sqlite3_stmt *stmt = nullptr;
   const char *sql = R"SQL(
-SELECT ta.id, ta.body, ta.created_at, u.name
+SELECT ta.id, ta.body,
+       strftime('%Y-%m-%d %H:%M:%S', datetime(ta.created_at, '-5 hours')),
+       u.name
   FROM helpdesk_ticket_activity ta
   JOIN helpdesk_profile p ON p.id = ta.profile_id
   JOIN auth_user u        ON u.id = p.user_id
@@ -428,6 +579,78 @@ FetchDefaultStatusId(quill::Logger *logger, sqlite3 *db) {
 }
 
 [[nodiscard]] inline std::optional<std::string>
+FetchDefaultTicketPriorityId(quill::Logger *logger, sqlite3 *db) {
+  sqlite3_stmt *stmt = nullptr;
+  if (sqlite3_prepare_v2(db,
+                         "SELECT default_ticket_priority_id FROM "
+                         "helpdesk_setting WHERE name = 'default'",
+                         -1, &stmt, nullptr) != SQLITE_OK) {
+    LOGJ_DEBUG(logger, "[requester] default priority query error",
+               sqlite3_errmsg(db));
+    return std::nullopt;
+  }
+  std::optional<std::string> id;
+  if (sqlite3_step(stmt) == SQLITE_ROW)
+    id = ColumnText(stmt, 0);
+  sqlite3_finalize(stmt);
+  return id;
+}
+
+[[nodiscard]] inline int FetchTicketBodyMaxlength(quill::Logger *logger,
+                                                  sqlite3 *db) {
+  sqlite3_stmt *stmt = nullptr;
+  if (sqlite3_prepare_v2(db,
+                         "SELECT ticket_body_maxlength FROM helpdesk_setting "
+                         "WHERE name = 'default'",
+                         -1, &stmt, nullptr) != SQLITE_OK) {
+    LOGJ_DEBUG(logger, "[requester] ticket body maxlength query error",
+               sqlite3_errmsg(db));
+    return 570;
+  }
+  int maxlength = 570;
+  if (sqlite3_step(stmt) == SQLITE_ROW)
+    maxlength = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+  return maxlength;
+}
+
+[[nodiscard]] inline int FetchTicketDueDelta(quill::Logger *logger,
+                                             sqlite3 *db) {
+  sqlite3_stmt *stmt = nullptr;
+  if (sqlite3_prepare_v2(db,
+                         "SELECT ticket_due_delta FROM helpdesk_setting "
+                         "WHERE name = 'default'",
+                         -1, &stmt, nullptr) != SQLITE_OK) {
+    LOGJ_DEBUG(logger, "[requester] ticket due delta query error",
+               sqlite3_errmsg(db));
+    return 172800;
+  }
+  int delta = 172800;
+  if (sqlite3_step(stmt) == SQLITE_ROW)
+    delta = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+  return delta;
+}
+
+[[nodiscard]] inline int FetchTicketActivityBodyMaxlength(quill::Logger *logger,
+                                                          sqlite3 *db) {
+  sqlite3_stmt *stmt = nullptr;
+  if (sqlite3_prepare_v2(db,
+                         "SELECT ticket_activity_body_maxlength FROM "
+                         "helpdesk_setting WHERE name = 'default'",
+                         -1, &stmt, nullptr) != SQLITE_OK) {
+    LOGJ_DEBUG(logger, "[requester] activity body maxlength query error",
+               sqlite3_errmsg(db));
+    return 170;
+  }
+  int maxlength = 170;
+  if (sqlite3_step(stmt) == SQLITE_ROW)
+    maxlength = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+  return maxlength;
+}
+
+[[nodiscard]] inline std::optional<std::string>
 FetchDefaultAssignedToId(quill::Logger *logger, sqlite3 *db) {
   sqlite3_stmt *stmt = nullptr;
   if (sqlite3_prepare_v2(db,
@@ -447,11 +670,9 @@ FetchDefaultAssignedToId(quill::Logger *logger, sqlite3 *db) {
 
 [[nodiscard]] inline std::optional<TicketCreateInput>
 ParseTicketCreateInput(const drogon::HttpRequestPtr &req) {
-  TicketCreateInput input{
-      req->getParameter("request_type_id"), req->getParameter("department_id"),
-      req->getParameter("priority_id"), req->getParameter("description")};
-  if (input.request_type_id.empty() || input.department_id.empty() ||
-      input.priority_id.empty() || input.description.empty())
+  TicketCreateInput input{req->getParameter("priority_id"),
+                          req->getParameter("body")};
+  if (input.priority_id.empty() || input.body.empty())
     return std::nullopt;
   return input;
 }
@@ -500,13 +721,15 @@ void Requester::TicketListGet(const drogon::HttpRequestPtr &req,
         drogon::HttpResponse::newRedirectionResponse("/ticketeer/auth/signin"));
   }
 
-  const auto search = req->getParameter("s");
-  auto tickets = FetchTickets(logger, db, profile->id, search);
+  TicketFilters filters{.search = req->getParameter("s"),
+                        .status_id = req->getParameter("status_id"),
+                        .priority_id = req->getParameter("priority_id"),
+                        .sort = req->getParameter("sort"),
+                        .sort_dir = req->getParameter("dir")};
+  const auto page = ParsePage(req->getParameter("p"));
+  auto data = BuildTicketListData(logger, db, profile->id, filters, page);
   sqlite3_close(db);
 
-  drogon::HttpViewData data;
-  data.insert("tickets", tickets);
-  data.insert("search", search);
   callback(
       drogon::HttpResponse::newHttpViewResponse("requester_ticket_list", data));
 }
@@ -528,15 +751,16 @@ void Requester::TicketCreateGet(const drogon::HttpRequestPtr &req,
         drogon::HttpResponse::newRedirectionResponse("/ticketeer/auth/signin"));
   }
 
-  auto request_types = FetchRequestTypes(logger, db);
-  auto departments = FetchDepartments(logger, db);
   auto priorities = FetchPriorities(logger, db);
+  const auto body_maxlength = FetchTicketBodyMaxlength(logger, db);
+  const auto default_ticket_priority_id =
+      FetchDefaultTicketPriorityId(logger, db).value_or("");
   sqlite3_close(db);
 
   drogon::HttpViewData data;
-  data.insert("request_types", request_types);
-  data.insert("departments", departments);
   data.insert("priorities", priorities);
+  data.insert("body_maxlength", std::to_string(body_maxlength));
+  data.insert("default_ticket_priority_id", default_ticket_priority_id);
   callback(drogon::HttpResponse::newHttpViewResponse("requester_ticket_create",
                                                      data));
 }
@@ -549,8 +773,8 @@ void Requester::TicketCreatePost(const drogon::HttpRequestPtr &req,
   const auto input = ParseTicketCreateInput(req);
   if (!input)
     return BadRequest(callback,
-                      "Missing or invalid required fields: request_type_id, "
-                      "department_id, priority_id, description");
+                      "Missing or invalid required fields: priority_id, "
+                      "body");
 
   sqlite3 *db = ConnectDB();
   if (!db)
@@ -562,6 +786,12 @@ void Requester::TicketCreatePost(const drogon::HttpRequestPtr &req,
     sqlite3_close(db);
     return BadRequest(callback, "Invalid or expired token",
                       drogon::k401Unauthorized);
+  }
+
+  const auto body_maxlength = FetchTicketBodyMaxlength(logger, db);
+  if (static_cast<int>(input->body.size()) > body_maxlength) {
+    sqlite3_close(db);
+    return BadRequest(callback, "Ticket body exceeds maximum length");
   }
 
   const auto default_status_id = FetchDefaultStatusId(logger, db);
@@ -576,12 +806,14 @@ void Requester::TicketCreatePost(const drogon::HttpRequestPtr &req,
     return BadRequest(callback, "Failed to get default assigned to");
   }
 
+  const auto ticket_due_delta = FetchTicketDueDelta(logger, db);
+
   sqlite3_stmt *stmt = nullptr;
-  const char *sql =
-      "INSERT INTO helpdesk_ticket "
-      "(request_type_id, requester_id, department_id, priority_id, "
-      "status_id, assigned_to_id, description) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?)";
+  const char *sql = R"SQL(
+INSERT INTO helpdesk_ticket
+  (requester_id, priority_id, status_id, assigned_to_id, body, due_date)
+VALUES (?, ?, ?, ?, ?, date('now', '-5 hours', '+' || ? || ' seconds'))
+)SQL";
 
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
     LOGJ_DEBUG(logger, "[requester] insert ticket error", sqlite3_errmsg(db));
@@ -589,14 +821,13 @@ void Requester::TicketCreatePost(const drogon::HttpRequestPtr &req,
     return BadRequest(callback, "Failed to create ticket");
   }
 
-  sqlite3_bind_text(stmt, 1, input->request_type_id.c_str(), -1, SQLITE_STATIC);
-  sqlite3_bind_text(stmt, 2, profile->id.c_str(), -1, SQLITE_STATIC);
-  sqlite3_bind_text(stmt, 3, input->department_id.c_str(), -1, SQLITE_STATIC);
-  sqlite3_bind_text(stmt, 4, input->priority_id.c_str(), -1, SQLITE_STATIC);
-  sqlite3_bind_text(stmt, 5, default_status_id->c_str(), -1, SQLITE_STATIC);
-  sqlite3_bind_text(stmt, 6, default_assigned_to_id->c_str(), -1,
+  sqlite3_bind_text(stmt, 1, profile->id.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 2, input->priority_id.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 3, default_status_id->c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 4, default_assigned_to_id->c_str(), -1,
                     SQLITE_STATIC);
-  sqlite3_bind_text(stmt, 7, input->description.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_text(stmt, 5, input->body.c_str(), -1, SQLITE_STATIC);
+  sqlite3_bind_int(stmt, 6, ticket_due_delta);
 
   if (sqlite3_step(stmt) != SQLITE_DONE) {
     LOGJ_DEBUG(logger, "[requester] insert ticket step error",
@@ -607,12 +838,9 @@ void Requester::TicketCreatePost(const drogon::HttpRequestPtr &req,
   }
   sqlite3_finalize(stmt);
 
-  auto tickets = FetchTickets(logger, db, profile->id, "");
+  auto data = BuildTicketListData(logger, db, profile->id, TicketFilters{}, 1);
   sqlite3_close(db);
 
-  drogon::HttpViewData data;
-  data.insert("tickets", tickets);
-  data.insert("search", std::string(""));
   callback(
       drogon::HttpResponse::newHttpViewResponse("requester_ticket_list", data));
 }
@@ -642,12 +870,16 @@ void Requester::TicketDetailsGet(const drogon::HttpRequestPtr &req,
 
   auto activities = FetchActivities(logger, db, ticket_id);
   auto attachments = FetchAttachments(logger, db, ticket_id);
+  const auto activity_body_maxlength =
+      FetchTicketActivityBodyMaxlength(logger, db);
   sqlite3_close(db);
 
   drogon::HttpViewData data;
   data.insert("ticket", *ticket);
   data.insert("activities", activities);
   data.insert("attachments", attachments);
+  data.insert("activity_body_maxlength",
+              std::to_string(activity_body_maxlength));
   callback(drogon::HttpResponse::newHttpViewResponse("requester_ticket_details",
                                                      data));
 }
@@ -677,12 +909,16 @@ void Requester::TicketActivityListGet(const drogon::HttpRequestPtr &req,
 
   auto activities = FetchActivities(logger, db, ticket_id);
   auto attachments = FetchAttachments(logger, db, ticket_id);
+  const auto activity_body_maxlength =
+      FetchTicketActivityBodyMaxlength(logger, db);
   sqlite3_close(db);
 
   drogon::HttpViewData data;
   data.insert("ticket", *ticket);
   data.insert("activities", activities);
   data.insert("attachments", attachments);
+  data.insert("activity_body_maxlength",
+              std::to_string(activity_body_maxlength));
   callback(drogon::HttpResponse::newHttpViewResponse("requester_ticket_details",
                                                      data));
 }
@@ -707,6 +943,24 @@ void Requester::TicketActivityCreateMessagePost(
     sqlite3_close(db);
     return BadRequest(callback, "Invalid or expired token",
                       drogon::k401Unauthorized);
+  }
+
+  const auto ticket_trait =
+      FetchTicketTraitForRequester(logger, db, ticket_id, profile->id);
+  if (!ticket_trait) {
+    sqlite3_close(db);
+    return BadRequest(callback, "Ticket not found", drogon::k404NotFound);
+  }
+  if (*ticket_trait == "closed") {
+    sqlite3_close(db);
+    return BadRequest(callback, "Ticket is closed", drogon::k403Forbidden);
+  }
+
+  const auto activity_body_maxlength =
+      FetchTicketActivityBodyMaxlength(logger, db);
+  if (static_cast<int>(message.size()) > activity_body_maxlength) {
+    sqlite3_close(db);
+    return BadRequest(callback, "Activity body exceeds maximum length");
   }
 
   sqlite3_stmt *stmt = nullptr;

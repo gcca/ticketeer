@@ -3,6 +3,7 @@
   using Rows = std::vector<Row>;
   auto& ticket_id = std::any_cast<std::string&>(@@["ticket_id"]);
   auto& assigned_to_id = std::any_cast<std::string&>(@@["assigned_to_id"]);
+  auto& assigned_to_name = std::any_cast<std::string&>(@@["assigned_to_name"]);
   auto& assignees = std::any_cast<Rows&>(@@["assignees"]);
   auto& o = supervisor_ticket_assigned_to_select_tmp_stream;
 %>
@@ -11,11 +12,21 @@
       hx-target="#ticket-assigned-to-form"
       hx-swap="outerHTML"
       hx-trigger="change"
-      class="min-w-40">
-  <select name="new_assigned_to" class="select select-bordered select-sm w-full">
-    <option value=""<%c++ if (assigned_to_id.empty()) { o << " selected"; } %>>Sin asignar</option>
+      class="col-span-2 dropdown w-full min-w-0 max-w-full">
+  <input type="hidden" name="new_assigned_to" value="<%c++ o << assigned_to_id; %>" />
+  <div tabindex="0"
+       role="button"
+       class="tooltip tooltip-left input input-bordered input-sm w-full min-w-0 max-w-full flex cursor-pointer items-center justify-between gap-2"
+       data-tip="<%c++ o << drogon::HttpViewData::htmlTranslate(assigned_to_name); %>">
+    <span class="truncate"><%c++ o << drogon::HttpViewData::htmlTranslate(assigned_to_name); %></span>
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-3 w-3 shrink-0 opacity-50">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+    </svg>
+  </div>
+  <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-50 w-64 p-2 shadow-lg border border-base-300">
+    <li><button type="button" class="w-full min-w-0<%c++ if (assigned_to_id.empty()) o << " menu-active"; %>" onclick="ticketeerSelectAssignedTo(this, '')"><span class="text-left break-words">Sin asignar</span></button></li>
 <%c++ for (const auto& a : assignees) { %>
-    <option value="<%c++ o << a.at("id"); %>"<%c++ if (a.at("id") == assigned_to_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("name")); %></option>
+    <li><button type="button" class="w-full min-w-0<%c++ if (a.at("id") == assigned_to_id) o << " menu-active"; %>" onclick="ticketeerSelectAssignedTo(this, '<%c++ o << a.at("id"); %>')"><span class="text-left break-words"><%c++ o << drogon::HttpViewData::htmlTranslate(a.at("name")); %></span></button></li>
 <%c++ } %>
-  </select>
+  </ul>
 </form>

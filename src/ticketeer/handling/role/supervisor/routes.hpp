@@ -36,22 +36,17 @@ public:
              "ticketeer::handling::auth::middlewares::LogInRequired",
              "ticketeer::handling::role::supervisor::middlewares::"
              "RoleSupervisorRequired");
-  METHOD_ADD(Supervisor::TicketDepartmentPost, "/ticket/{ticket_id}/department",
-             drogon::Post,
-             "ticketeer::handling::auth::middlewares::LogInRequired",
-             "ticketeer::handling::role::supervisor::middlewares::"
-             "RoleSupervisorRequired");
   METHOD_ADD(Supervisor::TicketAssignedToPost,
              "/ticket/{ticket_id}/assigned_to", drogon::Post,
              "ticketeer::handling::auth::middlewares::LogInRequired",
              "ticketeer::handling::role::supervisor::middlewares::"
              "RoleSupervisorRequired");
-  METHOD_ADD(Supervisor::TicketRequestTypePost,
-             "/ticket/{ticket_id}/request_type", drogon::Post,
+  METHOD_ADD(Supervisor::TicketPriorityPost, "/ticket/{ticket_id}/priority",
+             drogon::Post,
              "ticketeer::handling::auth::middlewares::LogInRequired",
              "ticketeer::handling::role::supervisor::middlewares::"
              "RoleSupervisorRequired");
-  METHOD_ADD(Supervisor::TicketPriorityPost, "/ticket/{ticket_id}/priority",
+  METHOD_ADD(Supervisor::TicketDueDatePost, "/ticket/{ticket_id}/due_date",
              drogon::Post,
              "ticketeer::handling::auth::middlewares::LogInRequired",
              "ticketeer::handling::role::supervisor::middlewares::"
@@ -76,6 +71,55 @@ public:
              "/ticket/{ticket_id}/activity/{activity_id}/attachment/"
              "{attachment_id}/download",
              drogon::Get,
+             "ticketeer::handling::auth::middlewares::LogInRequired",
+             "ticketeer::handling::role::supervisor::middlewares::"
+             "RoleSupervisorRequired");
+  METHOD_ADD(Supervisor::ConfigTicketStatusListGet,
+             "/config/ticket-status/list", drogon::Get,
+             "ticketeer::handling::auth::middlewares::LogInRequired",
+             "ticketeer::handling::role::supervisor::middlewares::"
+             "RoleSupervisorRequired");
+  METHOD_ADD(Supervisor::ConfigTicketStatusCreatePost,
+             "/config/ticket-status/save", drogon::Post,
+             "ticketeer::handling::auth::middlewares::LogInRequired",
+             "ticketeer::handling::role::supervisor::middlewares::"
+             "RoleSupervisorRequired");
+  METHOD_ADD(Supervisor::ConfigTicketStatusUpdatePost,
+             "/config/ticket-status/{ticket_status_id}/save", drogon::Post,
+             "ticketeer::handling::auth::middlewares::LogInRequired",
+             "ticketeer::handling::role::supervisor::middlewares::"
+             "RoleSupervisorRequired");
+  METHOD_ADD(Supervisor::ConfigTicketStatusDeletePost,
+              "/config/ticket-status/{ticket_status_id}/void", drogon::Post,
+              "ticketeer::handling::auth::middlewares::LogInRequired",
+              "ticketeer::handling::role::supervisor::middlewares::"
+              "RoleSupervisorRequired");
+  METHOD_ADD(Supervisor::ConfigTicketPriorityListGet,
+              "/config/ticket-priority/list", drogon::Get,
+              "ticketeer::handling::auth::middlewares::LogInRequired",
+              "ticketeer::handling::role::supervisor::middlewares::"
+              "RoleSupervisorRequired");
+  METHOD_ADD(Supervisor::ConfigTicketPriorityCreatePost,
+              "/config/ticket-priority/save", drogon::Post,
+              "ticketeer::handling::auth::middlewares::LogInRequired",
+              "ticketeer::handling::role::supervisor::middlewares::"
+              "RoleSupervisorRequired");
+  METHOD_ADD(Supervisor::ConfigTicketPriorityUpdatePost,
+              "/config/ticket-priority/{ticket_priority_id}/save", drogon::Post,
+              "ticketeer::handling::auth::middlewares::LogInRequired",
+              "ticketeer::handling::role::supervisor::middlewares::"
+              "RoleSupervisorRequired");
+  METHOD_ADD(Supervisor::ConfigTicketPriorityDeletePost,
+              "/config/ticket-priority/{ticket_priority_id}/void", drogon::Post,
+              "ticketeer::handling::auth::middlewares::LogInRequired",
+              "ticketeer::handling::role::supervisor::middlewares::"
+              "RoleSupervisorRequired");
+  METHOD_ADD(Supervisor::ConfigSettingsGet, "/config/settings", drogon::Get,
+             "ticketeer::handling::auth::middlewares::LogInRequired",
+             "ticketeer::handling::role::supervisor::middlewares::"
+             "RoleSupervisorRequired");
+  METHOD_ADD(Supervisor::ConfigSettingsPost, "/config/settings/save",
+             drogon::Post,
              "ticketeer::handling::auth::middlewares::LogInRequired",
              "ticketeer::handling::role::supervisor::middlewares::"
              "RoleSupervisorRequired");
@@ -106,22 +150,17 @@ public:
       std::function<void(const drogon::HttpResponsePtr &)> &&callback,
       const std::string &ticket_id);
 
-  void TicketDepartmentPost(
-      const drogon::HttpRequestPtr &req,
-      std::function<void(const drogon::HttpResponsePtr &)> &&callback,
-      const std::string &ticket_id);
-
   void TicketAssignedToPost(
       const drogon::HttpRequestPtr &req,
       std::function<void(const drogon::HttpResponsePtr &)> &&callback,
       const std::string &ticket_id);
 
-  void TicketRequestTypePost(
+  void TicketPriorityPost(
       const drogon::HttpRequestPtr &req,
       std::function<void(const drogon::HttpResponsePtr &)> &&callback,
       const std::string &ticket_id);
 
-  void TicketPriorityPost(
+  void TicketDueDatePost(
       const drogon::HttpRequestPtr &req,
       std::function<void(const drogon::HttpResponsePtr &)> &&callback,
       const std::string &ticket_id);
@@ -146,6 +185,50 @@ public:
       std::function<void(const drogon::HttpResponsePtr &)> &&callback,
       const std::string &ticket_id, const std::string &activity_id,
       const std::string &attachment_id);
+
+  void ConfigTicketStatusListGet(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback);
+
+  void ConfigTicketStatusCreatePost(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback);
+
+  void ConfigTicketStatusUpdatePost(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback,
+      const std::string &ticket_status_id);
+
+  void ConfigTicketStatusDeletePost(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback,
+      const std::string &ticket_status_id);
+
+  void ConfigTicketPriorityListGet(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback);
+
+  void ConfigTicketPriorityCreatePost(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback);
+
+  void ConfigTicketPriorityUpdatePost(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback,
+      const std::string &ticket_priority_id);
+
+  void ConfigTicketPriorityDeletePost(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback,
+      const std::string &ticket_priority_id);
+
+  void ConfigSettingsGet(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback);
+
+  void ConfigSettingsPost(
+      const drogon::HttpRequestPtr &req,
+      std::function<void(const drogon::HttpResponsePtr &)> &&callback);
 };
 
 } // namespace ticketeer

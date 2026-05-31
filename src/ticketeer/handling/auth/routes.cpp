@@ -139,10 +139,8 @@ RETURNING id
   }
 
   const char *profile_sql = R"SQL(
-INSERT INTO helpdesk_profile (user_id, department_id, role)
-SELECT ?, s.default_department_id, 'requester'
-FROM helpdesk_setting s
-WHERE s.name = 'default'
+INSERT INTO helpdesk_profile (user_id, role)
+VALUES (?, 'requester')
 ON CONFLICT(user_id) DO NOTHING
 )SQL";
 

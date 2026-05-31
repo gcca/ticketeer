@@ -6,13 +6,14 @@ services:
       target: execute
     image: ticketeer:latest
     environment:
-      DB_URL: /app/db/ticketeer.db
-      UPLOAD_DIR: /app/db/upload
+      TZ: UTC
+      DB_URL: /app/data/ticketeer.db
+      UPLOAD_DIR: /app/data/upload
     ports:
       - "5521:5521"
     volumes:
-      - db:/app/db
+      - data:/app/data
     restart: unless-stopped
 
 volumes:
-  db:
+  data:

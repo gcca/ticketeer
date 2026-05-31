@@ -1,0 +1,17 @@
+<%c++
+  auto& ticket_id = std::any_cast<std::string&>(@@["ticket_id"]);
+  auto& due_date = std::any_cast<std::string&>(@@["due_date"]);
+  auto& o = supervisor_ticket_due_date_input_tmp_stream;
+%>
+<form id="ticket-due-date-form"
+      hx-post="/ticketeer/supervisor/ticket/<%c++ o << ticket_id; %>/due_date"
+      hx-target="#ticket-due-date-form"
+      hx-swap="outerHTML"
+      hx-trigger="change"
+      class="w-full min-w-0 max-w-full">
+  <input id="ticket-due-date"
+         type="date"
+         name="new_due_date"
+         value="<%c++ o << drogon::HttpViewData::htmlTranslate(due_date); %>"
+         class="input input-bordered input-sm w-full" />
+</form>

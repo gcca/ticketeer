@@ -12,7 +12,7 @@ namespace {
   for (int i = 0; i < PQntuples(tickets); ++i) {
     Json::Value ticket;
     ticket["id"] = PQgetvalue(tickets, i, 0);
-    ticket["description"] = PQgetvalue(tickets, i, 1);
+    ticket["body"] = PQgetvalue(tickets, i, 1);
     ticket["status_id"] = PQgetvalue(tickets, i, 2);
     ticket["created_at"] = PQgetvalue(tickets, i, 3);
     ticket["activities"] = Json::arrayValue;
@@ -61,7 +61,7 @@ FetchTicketList(quill::Logger *logger, PGconn *pg, const char *log_prefix,
   std::vector<std::string> owned_params;
   std::vector<const char *> params;
   std::string query =
-      "SELECT t.id::text, t.description, t.status_id::text, t.created_at::text "
+      "SELECT t.id::text, t.body, t.status_id::text, t.created_at::text "
       "FROM helpdesk.ticket t";
 
   std::vector<std::string> filters;
@@ -75,7 +75,7 @@ FetchTicketList(quill::Logger *logger, PGconn *pg, const char *log_prefix,
     owned_params.push_back("%" + *search + "%");
     params.push_back(owned_params.back().c_str());
     const std::string placeholder = "$" + std::to_string(params.size());
-    filters.push_back("(t.description ILIKE " + placeholder +
+    filters.push_back("(t.body ILIKE " + placeholder +
                       " OR EXISTS (SELECT 1 FROM helpdesk.ticket_activity ta "
                       "WHERE ta.ticket_id = t.id AND ta.body ILIKE " +
                       placeholder + "))");

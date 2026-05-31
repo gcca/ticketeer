@@ -5,12 +5,13 @@ primary_region = 'ord'
   image = 'ghcr.io/gcca/ticketeer:latest'
 
 [env]
-  DB_URL = '/app/db/ticketeer.db'
-  UPLOAD_DIR = '/app/db/upload'
+  TZ = 'UTC'
+  DB_URL = '/app/data/ticketeer.db'
+  UPLOAD_DIR = '/app/data/upload'
 
 [[mounts]]
   source = 'ticketeer_data'
-  destination = '/app/db'
+  destination = '/app/data'
 
 [http_service]
   internal_port = 5521

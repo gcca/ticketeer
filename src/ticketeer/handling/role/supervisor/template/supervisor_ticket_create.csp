@@ -1,9 +1,9 @@
 <%c++
   using Row = std::map<std::string, std::string>;
   using Rows = std::vector<Row>;
-  auto& request_types = std::any_cast<Rows&>(@@["request_types"]);
-  auto& departments = std::any_cast<Rows&>(@@["departments"]);
   auto& priorities = std::any_cast<Rows&>(@@["priorities"]);
+  auto& body_maxlength = std::any_cast<std::string&>(@@["body_maxlength"]);
+  auto& default_ticket_priority_id = std::any_cast<std::string&>(@@["default_ticket_priority_id"]);
   auto& o = supervisor_ticket_create_tmp_stream;
 %>
 <div>
@@ -32,55 +32,27 @@
     <div class="grid gap-4 md:grid-cols-2">
       <label class="form-control w-full">
         <div class="label pb-1">
-          <span class="label-text text-xs font-semibold uppercase opacity-60">Tipo</span>
-        </div>
-        <select name="request_type_id" class="select select-bordered w-full" required>
-          <option value="" disabled selected>Selecciona un tipo</option>
-<%c++ for (const auto& row : request_types) { %>
-          <option value="<%c++ o << row.at("id"); %>"><%c++ o << drogon::HttpViewData::htmlTranslate(row.at("name")); %></option>
-<%c++ } %>
-        </select>
-      </label>
-
-      <label class="form-control w-full">
-        <div class="label pb-1">
-          <span class="label-text text-xs font-semibold uppercase opacity-60">Área</span>
-        </div>
-        <select name="department_id" class="select select-bordered w-full" required>
-          <option value="" disabled selected>Selecciona un area</option>
-<%c++ for (const auto& row : departments) { %>
-          <option value="<%c++ o << row.at("id"); %>"><%c++ o << drogon::HttpViewData::htmlTranslate(row.at("name")); %></option>
-<%c++ } %>
-        </select>
-      </label>
-
-      <label class="form-control w-full">
-        <div class="label pb-1">
           <span class="label-text text-xs font-semibold uppercase opacity-60">Prioridad</span>
         </div>
         <select name="priority_id" class="select select-bordered w-full" required>
-          <option value="" disabled selected>Selecciona una prioridad</option>
+          <option value="" disabled<%c++ if (default_ticket_priority_id.empty()) { o << " selected"; } %>>Selecciona una prioridad</option>
 <%c++ for (const auto& row : priorities) { %>
-          <option value="<%c++ o << row.at("id"); %>"><%c++ o << drogon::HttpViewData::htmlTranslate(row.at("name")); %></option>
+          <option value="<%c++ o << row.at("id"); %>"<%c++ if (row.at("id") == default_ticket_priority_id) { o << " selected"; } %>><%c++ o << drogon::HttpViewData::htmlTranslate(row.at("name")); %></option>
 <%c++ } %>
         </select>
       </label>
     </div>
 
-    <label class="form-control w-full max-w-xs">
-      <div class="label pb-1">
-        <span class="label-text text-xs font-semibold uppercase opacity-60">Fecha limite</span>
-      </div>
-      <input type="date" name="due_date" class="input input-bordered w-full" />
-    </label>
-
     <label class="form-control w-full">
       <div class="label pb-1">
-        <span class="label-text text-xs font-semibold uppercase opacity-60">Descripción</span>
+        <span class="label-text text-xs font-semibold uppercase opacity-60">Detalle</span>
+        <span class="label-text-alt text-xs opacity-60" id="body-counter">0/<%c++ o << body_maxlength; %></span>
       </div>
-      <textarea name="description"
+      <textarea name="body"
                 class="textarea textarea-bordered min-h-36 w-full"
-                placeholder="Describe la solicitud o incidente"
+                placeholder="Escribe el detalle de la solicitud o incidente"
+                maxlength="<%c++ o << body_maxlength; %>"
+                oninput="document.getElementById('body-counter').textContent = this.value.length + '/<%c++ o << body_maxlength; %>'"
                 required></textarea>
     </label>
 

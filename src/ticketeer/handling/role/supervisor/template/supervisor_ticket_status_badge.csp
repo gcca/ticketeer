@@ -1,5 +1,6 @@
 <%c++
   auto& status_name = std::any_cast<std::string&>(@@["status_name"]);
+  auto& status_trait = std::any_cast<std::string&>(@@["status_trait"]);
   auto& o = supervisor_ticket_status_badge_tmp_stream;
 %>
-<span id="ticket-status-badge" class="badge badge-ghost"><%c++ o << drogon::HttpViewData::htmlTranslate(status_name); %></span>
+<span id="ticket-status-badge" class="badge badge-ghost" data-trait="<%c++ o << status_trait; %>"><%c++ o << drogon::HttpViewData::htmlTranslate(status_name); %></span>
