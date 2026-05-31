@@ -1,12 +1,4 @@
 CREATE TABLE IF NOT EXISTS "schema_migrations" (version varchar(128) primary key);
-CREATE TABLE auth_app_provider (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    client_id     TEXT    NOT NULL,
-    client_secret TEXT    NOT NULL,
-    tenant_id     TEXT    NOT NULL,
-    domain        TEXT    NOT NULL UNIQUE,
-    created_at    TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
 CREATE TABLE auth_user (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     username       TEXT    NOT NULL UNIQUE,
@@ -22,6 +14,14 @@ CREATE TABLE auth_session (
     token      TEXT    NOT NULL UNIQUE,
     created_at TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at TEXT    NOT NULL
+);
+CREATE TABLE auth_app_provider (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id     TEXT    NOT NULL,
+    client_secret TEXT    NOT NULL,
+    tenant_id     TEXT    NOT NULL,
+    domain        TEXT    NOT NULL UNIQUE,
+    created_at    TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE helpdesk_department (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

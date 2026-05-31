@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
 
   drogon::app()
       .registerHandler("/", &IndexHandler)
-      .registerHandler("/ticketeer/?$", &IndexHandler)
+      .registerHandler("/ticketeer/", &IndexHandler)
       .registerHandler(
           "/ticketeer/healthcheck",
           [](const drogon::HttpRequestPtr &,
